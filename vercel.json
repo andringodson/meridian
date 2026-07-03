@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": true,
+  "crons": [
+    { "path": "/api/news?category=top", "schedule": "*/15 * * * *" }
+  ]
+}
