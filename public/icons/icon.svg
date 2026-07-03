@@ -1,0 +1,9 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Meridian app icon">
+  <rect width="512" height="512" rx="112" fill="#000000"/>
+  <g transform="translate(256,256)" stroke="#ffffff" stroke-width="20" fill="none">
+    <circle r="150"/>
+    <ellipse rx="60" ry="150"/>
+    <line x1="-150" y1="0" x2="150" y2="0"/>
+  </g>
+  <circle cx="256" cy="256" r="30" fill="#0000ee"/>
+</svg>
