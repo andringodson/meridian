@@ -186,5 +186,8 @@ h1, h2, h3, .display { font-family: var(--display); font-weight: 500; letter-spa
   display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
   border-top: 1px solid var(--border); color: var(--text-2); font-size: 12px;
 }
+.foot-sig { font-family: var(--display); letter-spacing: -0.02em; color: var(--text); }
+.foot-sig a { color: var(--accent-hi); }
+.foot-sig a:hover { text-decoration: underline; }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
