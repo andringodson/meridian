@@ -15,28 +15,57 @@ const FEEDS = {
     `${GN}?hl=en-US&gl=US&ceid=US:en`,
     'https://feeds.bbci.co.uk/news/rss.xml',
     'https://www.aljazeera.com/xml/rss/all.xml',
+    'https://feeds.npr.org/1001/rss.xml',
+    'https://rss.dw.com/rdf/rss-en-all',
+    'https://www.france24.com/en/rss',
   ],
   world: [
     gnTopic('WORLD'),
     'https://feeds.bbci.co.uk/news/world/rss.xml',
     'https://www.theguardian.com/world/rss',
+    'https://feeds.npr.org/1004/rss.xml',
+    'https://www.cbc.ca/webfeed/rss/rss-world',
+    'https://rss.dw.com/rdf/rss-en-world',
   ],
   business: [
     gnTopic('BUSINESS'),
     'https://feeds.bbci.co.uk/news/business/rss.xml',
+    'https://www.theguardian.com/uk/business/rss',
+    'https://www.cnbc.com/id/100003114/device/rss/rss.html',
+    'https://feeds.npr.org/1006/rss.xml',
   ],
   technology: [
     gnTopic('TECHNOLOGY'),
     'https://feeds.bbci.co.uk/news/technology/rss.xml',
     'https://www.theverge.com/rss/index.xml',
+    'https://feeds.arstechnica.com/arstechnica/index',
+    'https://www.wired.com/feed/rss',
+    'https://techcrunch.com/feed/',
   ],
   science: [
     gnTopic('SCIENCE'),
     'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml',
+    'https://www.theguardian.com/science/rss',
+    'https://feeds.npr.org/1007/rss.xml',
+    'https://feeds.arstechnica.com/arstechnica/science',
   ],
-  health: [gnTopic('HEALTH')],
-  sports: [gnTopic('SPORTS')],
-  entertainment: [gnTopic('ENTERTAINMENT')],
+  health: [
+    gnTopic('HEALTH'),
+    'https://feeds.npr.org/1128/rss.xml',
+    'https://www.theguardian.com/society/health/rss',
+  ],
+  sports: [
+    gnTopic('SPORTS'),
+    'https://feeds.bbci.co.uk/sport/rss.xml',
+    'https://www.espn.com/espn/rss/news',
+    'https://www.theguardian.com/sport/rss',
+  ],
+  entertainment: [
+    gnTopic('ENTERTAINMENT'),
+    'https://www.theguardian.com/culture/rss',
+    'https://feeds.npr.org/1008/rss.xml',
+    'https://variety.com/feed/',
+  ],
 };
 
 const parser = new XMLParser({
@@ -177,9 +206,10 @@ export default async function handler(req, res) {
     const prev = seen.get(k);
     if (!prev || (a.publishedAt || '') > (prev.publishedAt || '')) seen.set(k, a);
   }
+  const sourceCount = new Set(articles.map((a) => a.source)).size;
   articles = [...seen.values()].sort(
     (a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || '')
-  ).slice(0, 48);
+  ).slice(0, 60);
 
   // Edge-cache: fresh within 60s, serve slightly stale while revalidating.
   res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=600');
@@ -187,6 +217,7 @@ export default async function handler(req, res) {
   res.status(200).json({
     category,
     count: articles.length,
+    sources: sourceCount,
     updatedAt: new Date().toISOString(),
     articles,
   });
