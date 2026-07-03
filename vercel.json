@@ -2,9 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "trailingSlash": false,
-  "crons": [
-    { "path": "/api/news?category=top", "schedule": "*/15 * * * *" }
-  ],
   "headers": [
     {
       "source": "/(.*)",

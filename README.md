@@ -41,8 +41,8 @@ are the next strands, built on the same foundation.
   News topics plus curated publishers), normalized and de-duplicated on the
   server so you see each story once, from its original outlet.
 - **Self-updating** — the client refreshes on a timer and on refocus; the API is
-  cached at the edge and warmed on a schedule. Meridian stays current with zero
-  interaction.
+  cached at the edge with `stale-while-revalidate`, so responses are instant and
+  refreshed in the background. Meridian stays current with zero interaction.
 - **On this day** — notable historical events for today's date, drawn live from
   the Wikimedia REST feed.
 - **Installs everywhere** — one PWA installs as an app on Android, iOS, and
@@ -81,7 +81,7 @@ meridian/
 │   ├── robots.txt · sitemap.xml
 │   ├── logo.svg      # Minimal meridian mark
 │   └── icons/icon.svg
-├── vercel.json       # Clean URLs · security headers · cron warm-up
+├── vercel.json       # Clean URLs · security headers · CSP
 └── package.json
 ```
 
@@ -109,8 +109,8 @@ vercel deploy --prod
 ```
 
 Hosted on Vercel: static assets on the CDN, `/api/*` as Node serverless
-functions, security headers and a content-security policy applied in
-`vercel.json`, and a cron job that keeps the feed warm.
+functions, and security headers plus a content-security policy applied in
+`vercel.json`.
 
 ## Roadmap
 
