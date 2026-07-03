@@ -31,6 +31,7 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
+  <canvas id="fx" aria-hidden="true"></canvas>
   <a class="skip" href="#main">Skip to content</a>
 
   <header class="topbar">
@@ -68,6 +69,14 @@
     <button class="tab" data-cat="entertainment">Culture</button>
   </nav>
 
+  <section class="curators" id="curators" aria-label="Today's picks from our desk">
+    <div class="curators-head">
+      <h2>The Desk</h2>
+      <span class="curators-sub">Four minds, four picks — refreshed with the feed</span>
+    </div>
+    <div class="curators-row" id="curators-row"><!-- rendered --></div>
+  </section>
+
   <main id="main">
     <section class="stage" aria-live="polite">
       <div class="stage-head">
@@ -91,6 +100,7 @@
     <span>News via public RSS · History via Wikipedia</span>
   </footer>
 
+  <script src="/fluid.js" defer></script>
   <script src="/app.js" defer></script>
 </body>
 </html>
