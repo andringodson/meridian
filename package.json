@@ -4,10 +4,15 @@
   "private": true,
   "description": "Meridian — real-time news, knowledge and market intelligence from open sources.",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "vercel dev",
     "start": "vercel dev"
   },
+  "author": "Andrin Godson",
+  "license": "MIT",
   "dependencies": {
     "fast-xml-parser": "^4.5.0"
   }
