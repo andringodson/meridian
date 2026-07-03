@@ -43,6 +43,10 @@ are the next strands, built on the same foundation.
 - **Self-updating** — the client refreshes on a timer and on refocus; the API is
   cached at the edge with `stale-while-revalidate`, so responses are instant and
   refreshed in the background. Meridian stays current with zero interaction.
+- **Live markets ticker** — world indices, crypto and commodities streamed from
+  a free quote feed, with a continuous marquee and up/down colouring.
+- **The Desk** — four AI curator personas (Optimist, Analyst, Culturist,
+  Skeptic) each surface a top pick from the live feed, refreshed with it.
 - **On this day** — notable historical events for today's date, drawn live from
   the Wikimedia REST feed.
 - **Installs everywhere** — one PWA installs as an app on Android, iOS, and
@@ -91,6 +95,7 @@ meridian/
 |---|---|---|
 | `GET` | `/api/news?category=<cat>` | Aggregated, de-duplicated headlines. Categories: `top`, `world`, `business`, `technology`, `science`, `health`, `sports`, `entertainment`. |
 | `GET` | `/api/wiki` | Notable historical events for the current date. |
+| `GET` | `/api/markets` | World indices, crypto & commodities (delayed quotes). |
 
 Both return JSON and are cached at the edge (`s-maxage`) so upstream sources are
 never hammered.
@@ -114,7 +119,8 @@ functions, and security headers plus a content-security policy applied in
 
 ## Roadmap
 
-- **Markets** — indices, movers, and charts via free/delayed quote feeds.
+- **Markets** — a full analytics view (movers, charts, watchlists) building on
+  the live ticker.
 - **History explorer** — Wikipedia-driven topic pages with rich visuals.
 - **Native shells** — Capacitor (Android/iOS) and Tauri (`.exe`) wrappers.
 
