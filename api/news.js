@@ -73,19 +73,46 @@ function stripHtml(s = '') {
     .trim();
 }
 
-// Pull an image URL out of the many places RSS hides one.
+// Bump common CDN thumbnail URLs to a larger, sharper size so cards don't
+// upscale a tiny image into a blurry mess.
+function upgradeImage(url) {
+  if (!url) return url;
+  try {
+    let u = url;
+    // WordPress / many CMSs: strip "-320x180" style size suffixes → original.
+    u = u.replace(/-\d{2,4}x\d{2,4}(\.(jpe?g|png|webp))/i, '$1');
+    // BBC ichef: width lives in the path (…/standard/240/… or …/news/240/…).
+    u = u.replace(/(ichef\.bbci\.co\.uk\/(?:ace\/)?[a-z_]+)\/\d{2,4}\//i, '$1/1024/');
+    // Query-sized CDNs (Guardian, WP, Cloudinary, etc.): raise the dimensions.
+    u = u.replace(/([?&](?:width|w))=\d+/gi, '$1=1200')
+         .replace(/([?&](?:height|h))=\d+/gi, '$1=675')
+         .replace(/([?&](?:quality|q))=\d+/gi, '$1=85')
+         .replace(/([?&]resize=)\d+(?:px)?%2C\d+(?:px)?/gi, '$11200px%2C675px');
+    return u;
+  } catch { return url; }
+}
+
+// Pick the highest-resolution image RSS offers, from wherever it hides it.
 function extractImage(item) {
-  const cand =
-    item['media:content']?.['@_url'] ||
-    item['media:thumbnail']?.['@_url'] ||
-    (Array.isArray(item['media:content']) && item['media:content'][0]?.['@_url']) ||
-    item.enclosure?.['@_url'] ||
-    null;
-  if (cand && /^https?:\/\//.test(cand)) return cand;
-  const m = String(item['content:encoded'] || item.description || '').match(
-    /<img[^>]+src=["']([^"']+)["']/i
-  );
-  return m ? m[1] : null;
+  let best = null, bestW = 0;
+  const consider = (node) => {
+    if (!node) return;
+    const url = node['@_url'] || (typeof node === 'string' ? node : null);
+    if (!url || !/^https?:\/\//.test(url)) return;
+    const w = parseInt(node['@_width'] || 0, 10) || 0;
+    if (!best || w > bestW) { best = url; bestW = w; }
+  };
+  const mc = item['media:content'];
+  if (Array.isArray(mc)) mc.forEach(consider); else consider(mc);
+  consider(item['media:thumbnail']);
+  consider(item.enclosure);
+  if (!best) {
+    const m = String(item['content:encoded'] || item.description || '').match(
+      /<img[^>]+src=["']([^"']+)["']/i
+    );
+    if (m) best = m[1];
+  }
+  return upgradeImage(best);
 }
 
 function hostOf(url) {

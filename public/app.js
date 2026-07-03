@@ -46,8 +46,10 @@ const esc = (s = '') => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;'
 
 function cardHTML(a, lead) {
   const thumb = a.image
-    ? `<div class="thumb" style="background-image:url('${esc(a.image)}')"></div>`
-    : `<div class="thumb" style="background-image:${gradientFor(a.title)}">
+    ? `<div class="thumb"><img src="${esc(a.image)}" alt="" loading="lazy" decoding="async"
+         referrerpolicy="no-referrer"
+         onerror="this.parentElement.classList.add('noimg');this.parentElement.style.backgroundImage='${gradientFor(a.title)}';this.remove();" /></div>`
+    : `<div class="thumb noimg" style="background-image:${gradientFor(a.title)}">
          <span class="glyph">${esc((a.source || '?').trim().charAt(0).toUpperCase())}</span>
        </div>`;
   return `<a class="card${lead ? ' lead' : ''}" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">
@@ -91,6 +93,7 @@ async function loadNews(cat, { skeleton = true } = {}) {
     currentArticles = data.articles || [];
     lastFetch = Date.now();
     applySearch();
+    renderCurators(currentArticles);
     updatedEl.textContent = `Updated ${new Date(data.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     setLive(true);
   } catch (e) {
@@ -110,6 +113,83 @@ async function loadHistory() {
         <div class="ev">${esc(e.text)}</div>
       </a></li>`).join('') || `<li class="empty">History unavailable.</li>`;
   } catch { historyEl.innerHTML = `<li class="empty">History unavailable.</li>`; }
+}
+
+/* ---------- The Desk: AI curator personas ----------
+   Four characters, each with a voice, surface a top/interesting pick from the
+   live feed. Picks and one-liners are generated from the headlines — no keys,
+   no external calls — and refresh whenever the feed does. */
+const PERSONAS = [
+  { id: 'aria', name: 'Aria', role: 'The Optimist', color: '#0000ee', mono: 'A',
+    likes: ['break', 'first', 'launch', 'deal', 'win', 'record', 'cure', 'peace', 'rescue', 'growth'],
+    lines: [
+      'Genuinely hopeful — {t} is the kind of story we need more of.',
+      'A bright signal today: {t}. Worth your two minutes.',
+      'This one lifted me — {t}. Progress, quietly.',
+    ] },
+  { id: 'kato', name: 'Kato', role: 'The Analyst', color: '#a0c3ec', mono: 'K',
+    likes: ['market', 'economy', 'rate', 'trade', 'election', 'policy', 'gdp', 'inflation', 'court', 'data', 'oil'],
+    lines: [
+      'Watch the second-order effects — {t} moves more than it looks.',
+      'Signal over noise: {t} is the one to track this week.',
+      'Structurally important — {t}. Follow the incentives.',
+    ] },
+  { id: 'nova', name: 'Nova', role: 'The Culturist', color: '#c4b5fd', mono: 'N',
+    likes: ['film', 'music', 'art', 'game', 'ai', 'design', 'culture', 'star', 'award', 'viral', 'fashion', 'space'],
+    lines: [
+      'Everyone will be talking about this — {t}.',
+      'The zeitgeist, captured: {t}.',
+      'File under “iconic”: {t}.',
+    ] },
+  { id: 'rex', name: 'Rex', role: 'The Skeptic', color: '#ff7a17', mono: 'R',
+    likes: ['claim', 'reportedly', 'could', 'may', 'promise', 'hype', 'sued', 'probe', 'warn', 'ban', 'crisis'],
+    lines: [
+      'Read the fine print before you believe the headline on {t}.',
+      'I’m not sold yet — {t} deserves a harder look.',
+      'Big claim, thin evidence: {t}. Stay skeptical.',
+    ] },
+];
+
+function topic(title) {
+  const words = title.replace(/[—–:|].*$/, '').trim().split(/\s+/).slice(0, 7).join(' ');
+  return words.replace(/[.,;]$/, '');
+}
+function recency(a) {
+  if (!a.publishedAt) return 0;
+  const h = (Date.now() - new Date(a.publishedAt)) / 3.6e6;
+  return Math.max(0, 1 - h / 24); // newer = higher, ~0 after a day
+}
+function scoreFor(persona, a) {
+  const hay = (a.title + ' ' + (a.summary || '')).toLowerCase();
+  let s = recency(a) * 2;
+  for (const k of persona.likes) if (hay.includes(k)) s += 1.5;
+  if (a.image) s += 0.4;
+  return s;
+}
+function renderCurators(articles) {
+  const row = document.getElementById('curators-row');
+  if (!row || !articles.length) return;
+  const used = new Set();
+  const cards = PERSONAS.map((p) => {
+    const ranked = articles
+      .map((a) => ({ a, s: scoreFor(p, a) }))
+      .sort((x, y) => y.s - x.s);
+    const pick = (ranked.find((r) => !used.has(r.a.link)) || ranked[0]).a;
+    used.add(pick.link);
+    const line = p.lines[hash(p.id + pick.title) % p.lines.length].replace('{t}', `“${esc(topic(pick.title))}”`);
+    return `<article class="curator">
+      <div class="curator-top">
+        <span class="avatar" style="--c:${p.color}">${p.mono}</span>
+        <div><div class="curator-name">${p.name}</div><div class="curator-role">${p.role}</div></div>
+      </div>
+      <p class="curator-take">${line}</p>
+      <a class="curator-pick" href="${esc(pick.link)}" target="_blank" rel="noopener noreferrer">
+        ${esc(pick.title)}
+        <span class="curator-src">${esc(pick.source)}</span>
+      </a>
+    </article>`;
+  });
+  row.innerHTML = cards.join('');
 }
 
 /* search filters the loaded category client-side */
