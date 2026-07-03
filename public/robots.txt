@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://meridian.vercel.app/sitemap.xml
+Sitemap: https://meridian-andrin.vercel.app/sitemap.xml

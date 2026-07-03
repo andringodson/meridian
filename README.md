@@ -6,8 +6,8 @@
 
 **A real-time intelligence surface — world news, history, and markets, assembled from open sources and kept current on its own.**
 
-[![Live](https://img.shields.io/badge/live-meridian.vercel.app-0000ee?style=flat-square)](https://meridian.vercel.app)
-[![PWA](https://img.shields.io/badge/installable-PWA-0000ee?style=flat-square)](https://meridian.vercel.app)
+[![Live](https://img.shields.io/badge/live-meridian--andrin.vercel.app-0000ee?style=flat-square)](https://meridian-andrin.vercel.app)
+[![PWA](https://img.shields.io/badge/installable-PWA-0000ee?style=flat-square)](https://meridian-andrin.vercel.app)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-222222?style=flat-square)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-222222?style=flat-square)](LICENSE)
 
