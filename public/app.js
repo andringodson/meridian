@@ -44,7 +44,7 @@ function timeAgo(iso) {
 }
 const esc = (s = '') => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-function cardHTML(a, lead) {
+function cardHTML(a, lead, i) {
   const thumb = a.image
     ? `<div class="thumb"><img src="${esc(a.image)}" alt="" loading="lazy" decoding="async"
          referrerpolicy="no-referrer"
@@ -52,11 +52,11 @@ function cardHTML(a, lead) {
     : `<div class="thumb noimg" style="background-image:${gradientFor(a.title)}">
          <span class="glyph">${esc((a.source || '?').trim().charAt(0).toUpperCase())}</span>
        </div>`;
-  return `<a class="card${lead ? ' lead' : ''}" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">
+  return `<a class="card${lead ? ' lead' : ''}" style="--i:${i}" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">
     ${thumb}
     <div class="card-body">
       <div class="headline">${esc(a.title)}</div>
-      ${lead && a.summary ? `<div class="summary">${esc(a.summary)}</div>` : ''}
+      ${a.summary ? `<div class="summary">${esc(a.summary)}</div>` : ''}
       <div class="meta">
         <span class="source">${esc(a.source || 'Source')}</span>
         <span class="dot-sep"></span>
@@ -68,7 +68,7 @@ function cardHTML(a, lead) {
 
 function renderFeed(list) {
   if (!list.length) { feedEl.innerHTML = `<p class="empty">No stories found.</p>`; return; }
-  feedEl.innerHTML = list.map((a, i) => cardHTML(a, i === 0)).join('');
+  feedEl.innerHTML = list.map((a, i) => cardHTML(a, i === 0, i)).join('');
 }
 
 function renderSkeleton(n = 6) {
@@ -94,7 +94,8 @@ async function loadNews(cat, { skeleton = true } = {}) {
     lastFetch = Date.now();
     applySearch();
     renderCurators(currentArticles);
-    updatedEl.textContent = `Updated ${new Date(data.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const t = new Date(data.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    updatedEl.textContent = data.sources ? `${data.count} stories · ${data.sources} sources · ${t}` : `Updated ${t}`;
     setLive(true);
   } catch (e) {
     setLive(false);
@@ -229,11 +230,12 @@ function tickHTML(q) {
   const dir = q.changePct > 0.01 ? 'up' : q.changePct < -0.01 ? 'down' : 'flat';
   const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '·';
   const sign = q.changePct > 0 ? '+' : '';
-  return `<span class="tick">
+  const href = `https://finance.yahoo.com/quote/${encodeURIComponent(q.symbol)}`;
+  return `<a class="tick" href="${href}" target="_blank" rel="noopener noreferrer">
     <span class="tick-label">${esc(q.label)}</span>
     <span class="tick-price">${fmtPrice(q.price)}</span>
     <span class="tick-chg ${dir}">${arrow} ${sign}${q.changePct.toFixed(2)}%</span>
-  </span>`;
+  </a>`;
 }
 async function loadMarkets() {
   const track = document.getElementById('ticker-track');
@@ -258,6 +260,19 @@ installBtn.addEventListener('click', async () => {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 }
+
+/* manual refresh */
+const refreshBtn = $('#refresh');
+refreshBtn?.addEventListener('click', async () => {
+  refreshBtn.classList.add('spinning');
+  await Promise.all([loadNews(currentCat), loadMarkets()]);
+  setTimeout(() => refreshBtn.classList.remove('spinning'), 400);
+});
+
+/* back-to-top */
+const toTop = $('#to-top');
+addEventListener('scroll', () => { toTop.hidden = scrollY < 600; }, { passive: true });
+toTop?.addEventListener('click', () => scrollTo({ top: 0, behavior: 'smooth' }));
 
 /* boot */
 loadNews('top');
