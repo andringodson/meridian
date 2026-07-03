@@ -219,6 +219,34 @@ document.addEventListener('visibilitychange', () => {
 // keep the "updated" label honest without a refetch
 setInterval(() => { if (currentArticles.length) applySearch(); }, 60_000);
 
+/* ---------- markets ticker ---------- */
+function fmtPrice(v) {
+  if (v >= 1000) return v.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  if (v >= 1) return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return v.toLocaleString('en-US', { maximumFractionDigits: 4 });
+}
+function tickHTML(q) {
+  const dir = q.changePct > 0.01 ? 'up' : q.changePct < -0.01 ? 'down' : 'flat';
+  const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '·';
+  const sign = q.changePct > 0 ? '+' : '';
+  return `<span class="tick">
+    <span class="tick-label">${esc(q.label)}</span>
+    <span class="tick-price">${fmtPrice(q.price)}</span>
+    <span class="tick-chg ${dir}">${arrow} ${sign}${q.changePct.toFixed(2)}%</span>
+  </span>`;
+}
+async function loadMarkets() {
+  const track = document.getElementById('ticker-track');
+  if (!track) return;
+  try {
+    const r = await fetch('/api/markets', { cache: 'no-store' });
+    const data = await r.json();
+    if (!data.quotes || !data.quotes.length) return;
+    const one = data.quotes.map(tickHTML).join('');
+    track.innerHTML = one + one; // duplicate for a seamless marquee loop
+  } catch { /* leave prior ticker in place */ }
+}
+
 /* PWA install */
 let deferredPrompt = null;
 const installBtn = $('#install');
@@ -234,3 +262,5 @@ if ('serviceWorker' in navigator) {
 /* boot */
 loadNews('top');
 loadHistory();
+loadMarkets();
+setInterval(loadMarkets, 60_000);
