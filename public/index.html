@@ -76,7 +76,10 @@
     <button class="tab" data-cat="health">Health</button>
     <button class="tab" data-cat="sports">Sports</button>
     <button class="tab" data-cat="entertainment">Culture</button>
+    <button class="tab tab-markets" data-view="markets">Markets</button>
   </nav>
+
+  <div class="tab-peek" id="tab-peek" hidden aria-hidden="true"></div>
 
   <section class="curators" id="curators" aria-label="Today's picks from our desk">
     <div class="curators-head">
@@ -84,6 +87,37 @@
       <span class="curators-sub">Four minds, four picks — refreshed with the feed</span>
     </div>
     <div class="curators-row" id="curators-row"><!-- rendered --></div>
+  </section>
+
+  <section class="markets-view" id="markets-view" hidden aria-label="Market analysis">
+    <div class="mkt-head">
+      <div>
+        <h1 class="stage-title">Markets</h1>
+        <span class="mkt-sub" id="mkt-updated">Live trends · quotes may be delayed</span>
+      </div>
+    </div>
+
+    <div class="mkt-detail" id="mkt-detail">
+      <div class="mkt-detail-head">
+        <div>
+          <div class="mkt-detail-name" id="mkt-detail-name">S&amp;P 500</div>
+          <div class="mkt-detail-quote"><span id="mkt-detail-price">—</span> <span id="mkt-detail-chg" class="chg flat">·</span></div>
+        </div>
+        <div class="mkt-ranges" id="mkt-ranges" aria-label="Chart range">
+          <button class="rng is-active" data-range="1d">1D</button>
+          <button class="rng" data-range="5d">5D</button>
+          <button class="rng" data-range="1mo">1M</button>
+          <button class="rng" data-range="6mo">6M</button>
+          <button class="rng" data-range="1y">1Y</button>
+        </div>
+      </div>
+      <div class="mkt-chart-wrap" id="mkt-chart-wrap">
+        <canvas id="mkt-chart"></canvas>
+        <div class="mkt-tip" id="mkt-tip" hidden></div>
+      </div>
+    </div>
+
+    <div class="mkt-grid" id="mkt-grid"><!-- rendered --></div>
   </section>
 
   <main id="main">

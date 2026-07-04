@@ -39,14 +39,14 @@
   }
   function draw(t) {
     ctx.clearRect(0, 0, W, H);
-    mouse.x += (mouse.tx - mouse.x) * 0.04;
-    mouse.y += (mouse.ty - mouse.y) * 0.04;
+    mouse.x += (mouse.tx - mouse.x) * 0.12;
+    mouse.y += (mouse.ty - mouse.y) * 0.12;
     ctx.globalCompositeOperation = 'lighter';
     const base = Math.min(W, H);
     for (const b of blobs) {
       const ang = t * b.sp + b.ph;
-      const px = (mouse.x - 0.5) * 0.14 * b.d;
-      const py = (mouse.y - 0.5) * 0.14 * b.d;
+      const px = (mouse.x - 0.5) * 0.38 * b.d;
+      const py = (mouse.y - 0.5) * 0.38 * b.d;
       const x = (b.ax + Math.cos(ang) * b.ox + px) * W;
       const y = (b.ay + Math.sin(ang * 1.3) * b.oy + py) * H;
       const r = b.r * base * (1 + 0.08 * Math.sin(ang * 2.1));

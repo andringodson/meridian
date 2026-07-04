@@ -300,3 +300,73 @@ a.tick:hover { background: rgba(255,255,255,0.05); }
 .foot-sig a:hover { text-decoration: underline; }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---------- tab peek (hover headline preview) ---------- */
+.tab-peek {
+  position: absolute; z-index: 60; width: min(360px, calc(100vw - 16px));
+  background: #050505; border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; pointer-events: none;
+  animation: peek-in .16s ease both;
+}
+@keyframes peek-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.peek-title {
+  font-family: var(--display); font-size: 11px; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); margin-bottom: 8px;
+}
+.peek-item { padding: 7px 0; border-top: 1px solid #161616; display: flex; flex-direction: column; gap: 2px; }
+.peek-item:first-of-type { border-top: 0; }
+.peek-src { font-size: 10.5px; color: var(--accent-hi); letter-spacing: .04em; text-transform: uppercase; }
+.peek-head { font-size: 13px; line-height: 1.4; color: var(--text); }
+
+/* ---------- markets analysis view ---------- */
+body.view-markets .curators, body.view-markets main { display: none; }
+.markets-view { max-width: var(--maxw); margin: 0 auto; padding: 26px clamp(16px, 4vw, 40px) 10px; }
+.mkt-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 18px; }
+.mkt-sub { font-size: 12px; color: var(--text-2); }
+
+.mkt-detail { border: 1px solid var(--border); border-radius: 12px; padding: 18px 18px 10px; background: rgba(5,5,5,.55); }
+.mkt-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+.mkt-detail-name { font-family: var(--display); font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.mkt-detail-quote { font-size: 15px; margin-top: 2px; font-variant-numeric: tabular-nums; display: flex; gap: 10px; align-items: baseline; }
+.mkt-ranges { display: flex; gap: 4px; }
+.rng {
+  background: none; border: 1px solid var(--border); color: var(--text-2);
+  font: 600 11.5px var(--display); letter-spacing: .04em; padding: 6px 12px;
+  border-radius: 999px; cursor: pointer; transition: color .15s, border-color .15s;
+}
+.rng:hover { color: var(--text); border-color: #333; }
+.rng.is-active { color: #fff; border-color: var(--accent); background: rgba(0,0,238,.16); }
+
+.mkt-chart-wrap { position: relative; }
+#mkt-chart { display: block; width: 100%; }
+.mkt-tip {
+  position: absolute; z-index: 5; pointer-events: none;
+  background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 7px;
+  padding: 5px 9px; display: flex; gap: 8px; align-items: baseline; white-space: nowrap;
+}
+.tip-t { font-size: 10.5px; color: var(--text-2); }
+.tip-v { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--text); }
+
+.mkt-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px; margin: 14px 0 26px;
+}
+.mkt-card {
+  text-align: left; background: none; border: 1px solid var(--border); border-radius: 12px;
+  padding: 13px 14px 12px; cursor: pointer; color: var(--text);
+  display: flex; flex-direction: column; gap: 8px;
+  transition: border-color .15s, transform .15s;
+}
+.mkt-card:hover { border-color: #3a3a3a; transform: translateY(-2px); }
+.mkt-card.is-active { border-color: var(--accent); }
+.mkt-card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.mkt-label { font-family: var(--display); font-weight: 600; font-size: 13.5px; letter-spacing: -0.01em; }
+.mkt-kind { font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); }
+.mkt-spark { width: 100%; height: 36px; }
+.mkt-card-bottom { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.mkt-price { font-size: 14.5px; font-variant-numeric: tabular-nums; }
+
+.chg { font-variant-numeric: tabular-nums; font-size: 12px; }
+.chg.up { color: #35d07f; }
+.chg.down { color: #ff5470; }
+.chg.flat { color: var(--text-2); }
