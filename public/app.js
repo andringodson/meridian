@@ -337,20 +337,32 @@ function setupCanvas(cv, cssW, cssH) {
   return ctx;
 }
 
-function drawSpark(cv, values, pct) {
+/* each asset family gets its own hue; the line blends it into the up/down
+   color so charts are colorful while direction stays labeled by the chips */
+const KIND_HUE = {
+  index: '#5b8cff', stock: '#f0abfc', crypto: '#f5b942',
+  commodity: '#ff9e64', fx: '#4dd0e1',
+};
+function hueOf(kind) { return KIND_HUE[kind] || '#5b8cff'; }
+
+function drawSpark(cv, values, pct, kind) {
   if (!values || values.length < 2) return;
   const W = 120, H = 36, pad = 2;
   const ctx = setupCanvas(cv, W, H);
   const min = Math.min(...values), max = Math.max(...values), span = max - min || 1;
   const x = (i) => pad + (i / (values.length - 1)) * (W - pad * 2);
   const y = (v) => H - pad - ((v - min) / span) * (H - pad * 2);
-  const c = colorOf(pct);
+  const c = colorOf(pct), hue = hueOf(kind);
+  const stroke = ctx.createLinearGradient(0, 0, W, 0);
+  stroke.addColorStop(0, hue); stroke.addColorStop(1, c);
   ctx.beginPath();
   values.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v))));
-  ctx.strokeStyle = c; ctx.lineWidth = 1.75; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.shadowColor = c; ctx.shadowBlur = 6;
+  ctx.strokeStyle = stroke; ctx.lineWidth = 1.75; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.shadowBlur = 0;
   ctx.lineTo(x(values.length - 1), H); ctx.lineTo(x(0), H); ctx.closePath();
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, c + '2e'); g.addColorStop(1, c + '00');
+  g.addColorStop(0, c + '3a'); g.addColorStop(0.55, hue + '14'); g.addColorStop(1, hue + '00');
   ctx.fillStyle = g; ctx.fill();
 }
 
@@ -363,7 +375,7 @@ function renderMarketGrid() {
     <button class="mkt-card${q.symbol === detailSymbol ? ' is-active' : ''}" data-sym="${esc(q.symbol)}">
       <div class="mkt-card-top">
         <span class="mkt-label">${esc(q.label)}</span>
-        <span class="mkt-kind">${esc(q.kind)}</span>
+        <span class="mkt-kind" style="color:${hueOf(q.kind)}">${esc(q.kind)}</span>
       </div>
       <canvas class="mkt-spark" width="120" height="36" aria-hidden="true"></canvas>
       <div class="mkt-card-bottom">
@@ -372,7 +384,7 @@ function renderMarketGrid() {
       </div>
     </button>`).join('');
   grid.querySelectorAll('.mkt-card').forEach((card, i) => {
-    drawSpark(card.querySelector('.mkt-spark'), shown[i].spark, shown[i].changePct);
+    drawSpark(card.querySelector('.mkt-spark'), shown[i].spark, shown[i].changePct, shown[i].kind);
     card.addEventListener('click', () => {
       detailSymbol = card.dataset.sym;
       grid.querySelectorAll('.mkt-card').forEach((c) => c.classList.toggle('is-active', c === card));
@@ -420,6 +432,7 @@ function drawDetail() {
   const first = detailRange === '1d' && detailData.prevClose ? detailData.prevClose : vals[0];
   const pct = first ? ((vals[vals.length - 1] - first) / first) * 100 : 0;
   const c = colorOf(pct);
+  const hue = hueOf(detailData.kind);
 
   // previous-close reference (1D only)
   if (detailRange === '1d' && detailData.prevClose) {
@@ -429,14 +442,23 @@ function drawDetail() {
     ctx.setLineDash([]);
   }
 
-  // area + line
+  // area + line — colorful gradient stroke with a soft glow: brand blue
+  // sweeps through the asset family's hue into the direction color.
+  const stroke = ctx.createLinearGradient(padL, 0, W - padR, 0);
+  stroke.addColorStop(0, '#4d5dff'); stroke.addColorStop(0.5, hue); stroke.addColorStop(1, c);
   ctx.beginPath();
   pts.forEach((p, i) => (i ? ctx.lineTo(x(i), y(p[1])) : ctx.moveTo(x(i), y(p[1]))));
-  ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.shadowColor = c; ctx.shadowBlur = 14;
+  ctx.strokeStyle = stroke; ctx.lineWidth = 2.25; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.shadowBlur = 0;
   ctx.lineTo(x(pts.length - 1), H - padB); ctx.lineTo(x(0), H - padB); ctx.closePath();
   const g = ctx.createLinearGradient(0, padT, 0, H - padB);
-  g.addColorStop(0, c + '30'); g.addColorStop(1, c + '00');
+  g.addColorStop(0, c + '3d'); g.addColorStop(0.5, hue + '1c'); g.addColorStop(1, '#4d5dff00');
   ctx.fillStyle = g; ctx.fill();
+  // last-price pulse dot
+  const lx = x(pts.length - 1), ly = y(vals[vals.length - 1]);
+  ctx.beginPath(); ctx.arc(lx, ly, 7, 0, Math.PI * 2); ctx.fillStyle = c + '2e'; ctx.fill();
+  ctx.beginPath(); ctx.arc(lx, ly, 3.2, 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill();
 
   // header quote
   $('#mkt-detail-name').textContent = detailData.label;
