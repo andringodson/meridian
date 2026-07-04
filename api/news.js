@@ -72,6 +72,9 @@ const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
   trimValues: true,
+  // Big feeds (Google News) exceed the default entity-expansion cap and would
+  // be dropped whole; stripHtml() decodes the common entities instead.
+  processEntities: false,
 });
 
 async function fetchText(url, ms = 6000) {
@@ -154,14 +157,19 @@ function normalize(item, feedUrl) {
     (typeof item.link === 'object' ? item.link['@_href'] : item.link) ||
     item.guid?.['#text'] || item.guid || '';
   // Google News titles are "Headline - Source"; split off the trailing source.
+  // Only GN feeds get this treatment — regular publisher titles may contain
+  // " - " and must not be split.
+  const isGN = feedUrl.includes('news.google.com');
   let title = rawTitle;
   let source =
     (typeof item.source === 'object' ? item.source['#text'] : item.source) || '';
-  if (!source && / - [^-]+$/.test(rawTitle)) {
+  if (isGN && !source && / - [^-]+$/.test(rawTitle)) {
     const idx = rawTitle.lastIndexOf(' - ');
     title = rawTitle.slice(0, idx);
     source = rawTitle.slice(idx + 3);
   }
+  // Credit lines ("© AFP") or overlong strings are not publisher names.
+  if (/^©/.test(source) || source.length > 40) source = '';
   if (!source) source = hostOf(link) || hostOf(feedUrl);
   const published = item.pubDate || item.published || item.updated || '';
   return {
@@ -209,7 +217,30 @@ export default async function handler(req, res) {
   const sourceCount = new Set(articles.map((a) => a.source)).size;
   articles = [...seen.values()].sort(
     (a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || '')
-  ).slice(0, 60);
+  );
+
+  // Interleave publishers round-robin (newest-first within each) so the feed
+  // reads as a mix of voices instead of one source's burst; cap any single
+  // publisher, and let an image-bearing story lead the page.
+  const bySource = new Map();
+  for (const a of articles) {
+    const s = a.source.toLowerCase();
+    if (!bySource.has(s)) bySource.set(s, []);
+    if (bySource.get(s).length < 8) bySource.get(s).push(a);
+  }
+  const queues = [...bySource.values()];
+  const mixed = [];
+  for (let round = 0; mixed.length < 60; round++) {
+    let added = false;
+    for (const q of queues) {
+      if (mixed.length >= 60) break;
+      if (q[round]) { mixed.push(q[round]); added = true; }
+    }
+    if (!added) break;
+  }
+  const leadIdx = mixed.findIndex((a) => a.image);
+  if (leadIdx > 0) mixed.unshift(mixed.splice(leadIdx, 1)[0]);
+  articles = mixed;
 
   // Edge-cache: fresh within 60s, serve slightly stale while revalidating.
   res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=600');
