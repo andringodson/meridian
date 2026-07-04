@@ -18,6 +18,7 @@ const FEEDS = {
     'https://feeds.npr.org/1001/rss.xml',
     'https://rss.dw.com/rdf/rss-en-all',
     'https://www.france24.com/en/rss',
+    'https://feeds.skynews.com/feeds/rss/home.xml',
   ],
   world: [
     gnTopic('WORLD'),
@@ -26,6 +27,7 @@ const FEEDS = {
     'https://feeds.npr.org/1004/rss.xml',
     'https://www.cbc.ca/webfeed/rss/rss-world',
     'https://rss.dw.com/rdf/rss-en-world',
+    'https://feeds.skynews.com/feeds/rss/world.xml',
   ],
   business: [
     gnTopic('BUSINESS'),
@@ -33,6 +35,7 @@ const FEEDS = {
     'https://www.theguardian.com/uk/business/rss',
     'https://www.cnbc.com/id/100003114/device/rss/rss.html',
     'https://feeds.npr.org/1006/rss.xml',
+    'https://feeds.skynews.com/feeds/rss/business.xml',
   ],
   technology: [
     gnTopic('TECHNOLOGY'),
@@ -41,6 +44,7 @@ const FEEDS = {
     'https://feeds.arstechnica.com/arstechnica/index',
     'https://www.wired.com/feed/rss',
     'https://techcrunch.com/feed/',
+    'https://feeds.skynews.com/feeds/rss/technology.xml',
   ],
   science: [
     gnTopic('SCIENCE'),
@@ -65,6 +69,7 @@ const FEEDS = {
     'https://www.theguardian.com/culture/rss',
     'https://feeds.npr.org/1008/rss.xml',
     'https://variety.com/feed/',
+    'https://feeds.skynews.com/feeds/rss/entertainment.xml',
   ],
 };
 
@@ -139,9 +144,16 @@ function extractImage(item) {
   consider(item['media:thumbnail']);
   consider(item.enclosure);
   if (!best) {
-    const m = String(item['content:encoded'] || item.description || '').match(
-      /<img[^>]+src=["']([^"']+)["']/i
-    );
+    // Embedded HTML arrives entity-escaped (processEntities is off) — decode
+    // enough of it to find the first <img>. Covers RSS description/encoded
+    // and Atom content/summary.
+    const raw = ['content:encoded', 'content', 'description', 'summary']
+      .map((k) => item[k]?.['#text'] ?? item[k])
+      .find((v) => typeof v === 'string' && v.length) || '';
+    const html = raw
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&amp;/g, '&');
+    const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
     if (m) best = m[1];
   }
   return upgradeImage(best);
@@ -187,6 +199,7 @@ function parseFeed(xml, feedUrl) {
   const items =
     doc?.rss?.channel?.item ||
     doc?.feed?.entry || // Atom
+    doc?.['rdf:RDF']?.item || // RDF (DW)
     [];
   const arr = Array.isArray(items) ? items : [items];
   return arr.map((it) => normalize(it, feedUrl)).filter((a) => a.title && a.link);
@@ -219,28 +232,32 @@ export default async function handler(req, res) {
     (a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || '')
   );
 
-  // Interleave publishers round-robin (newest-first within each) so the feed
-  // reads as a mix of voices instead of one source's burst; cap any single
-  // publisher, and let an image-bearing story lead the page.
-  const bySource = new Map();
-  for (const a of articles) {
-    const s = a.source.toLowerCase();
-    if (!bySource.has(s)) bySource.set(s, []);
-    if (bySource.get(s).length < 8) bySource.get(s).push(a);
-  }
-  const queues = [...bySource.values()];
-  const mixed = [];
-  for (let round = 0; mixed.length < 60; round++) {
-    let added = false;
-    for (const q of queues) {
-      if (mixed.length >= 60) break;
-      if (q[round]) { mixed.push(q[round]); added = true; }
+  // Round-robin across publishers (newest-first within each, capped) so the
+  // feed reads as a mix of voices instead of one source's burst.
+  const interleave = (list, limit) => {
+    const bySource = new Map();
+    for (const a of list) {
+      const s = a.source.toLowerCase();
+      if (!bySource.has(s)) bySource.set(s, []);
+      if (bySource.get(s).length < 8) bySource.get(s).push(a);
     }
-    if (!added) break;
-  }
-  const leadIdx = mixed.findIndex((a) => a.image);
-  if (leadIdx > 0) mixed.unshift(mixed.splice(leadIdx, 1)[0]);
-  articles = mixed;
+    const queues = [...bySource.values()];
+    const out = [];
+    for (let round = 0; out.length < limit; round++) {
+      let added = false;
+      for (const q of queues) {
+        if (out.length >= limit) break;
+        if (q[round]) { out.push(q[round]); added = true; }
+      }
+      if (!added) break;
+    }
+    return out;
+  };
+  // Stories with a real preview image fill the page first — interleaved among
+  // themselves so image-rich publishers aren't crowded out by dozens of
+  // imageless wire entries — then imageless items top up the remainder.
+  const imaged = interleave(articles.filter((a) => a.image), 60);
+  articles = [...imaged, ...interleave(articles.filter((a) => !a.image), 60 - imaged.length)];
 
   // Edge-cache: fresh within 60s, serve slightly stale while revalidating.
   res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=600');
