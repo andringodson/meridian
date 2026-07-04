@@ -15,7 +15,27 @@ const INSTRUMENTS = [
   { s: 'GC=F', label: 'Gold', kind: 'commodity' },
   { s: 'CL=F', label: 'Crude Oil', kind: 'commodity' },
   { s: 'EURUSD=X', label: 'EUR/USD', kind: 'fx' },
+  // Widely-watched stocks for the analysis grid + movers.
+  { s: 'AAPL', label: 'Apple', kind: 'stock' },
+  { s: 'MSFT', label: 'Microsoft', kind: 'stock' },
+  { s: 'NVDA', label: 'NVIDIA', kind: 'stock' },
+  { s: 'GOOGL', label: 'Alphabet', kind: 'stock' },
+  { s: 'AMZN', label: 'Amazon', kind: 'stock' },
+  { s: 'META', label: 'Meta', kind: 'stock' },
+  { s: 'TSLA', label: 'Tesla', kind: 'stock' },
+  { s: 'AVGO', label: 'Broadcom', kind: 'stock' },
+  { s: 'JPM', label: 'JPMorgan', kind: 'stock' },
+  { s: 'V', label: 'Visa', kind: 'stock' },
+  { s: 'NFLX', label: 'Netflix', kind: 'stock' },
+  { s: 'AMD', label: 'AMD', kind: 'stock' },
+  { s: 'INTC', label: 'Intel', kind: 'stock' },
+  { s: 'DIS', label: 'Disney', kind: 'stock' },
+  { s: 'KO', label: 'Coca-Cola', kind: 'stock' },
+  { s: 'BA', label: 'Boeing', kind: 'stock' },
 ];
+
+// Any Yahoo-style symbol a user can chart via search (validated, not proxied).
+const SYM_RE = /^[A-Za-z0-9.^=-]{1,12}$/;
 
 // Allowed history windows → Yahoo range/interval pairs.
 const RANGES = {
@@ -76,19 +96,48 @@ async function quote(inst) {
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
-  // Detail mode: full series for one whitelisted instrument.
+  // Search mode: find tickers by name/symbol (Yahoo's public search).
+  const q = req.query?.search;
+  if (q) {
+    try {
+      const r = await fetch(
+        `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(String(q).slice(0, 40))}&quotesCount=8&newsCount=0`,
+        { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MeridianBot/0.1)' } }
+      );
+      const j = await r.json();
+      const matches = (j?.quotes || [])
+        .filter((m) => m.symbol && SYM_RE.test(m.symbol))
+        .map((m) => ({
+          symbol: m.symbol,
+          name: m.shortname || m.longname || m.symbol,
+          exch: m.exchDisp || m.exchange || '',
+          type: m.quoteType || '',
+        }));
+      res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+      res.status(200).json({ matches });
+    } catch {
+      res.status(502).json({ error: 'search unavailable' });
+    }
+    return;
+  }
+
+  // Detail mode: full series for one symbol (known instruments get their
+  // curated label; any other well-formed ticker is allowed for search→chart).
   const symbol = req.query?.symbol;
   if (symbol) {
     const inst = INSTRUMENTS.find((i) => i.s === symbol);
     const win = RANGES[String(req.query?.range || '1d')];
-    if (!inst || !win) { res.status(400).json({ error: 'unknown symbol or range' }); return; }
+    if ((!inst && !SYM_RE.test(String(symbol))) || !win) { res.status(400).json({ error: 'unknown symbol or range' }); return; }
     try {
-      const result = await chart(inst.s, win);
+      const result = await chart(String(symbol), win);
       const m = result?.meta || {};
       const pts = series(result);
+      if (!pts.length) { res.status(404).json({ error: 'no data for symbol' }); return; }
       res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
       res.status(200).json({
-        symbol: inst.s, label: inst.label, kind: inst.kind,
+        symbol: String(symbol),
+        label: inst?.label || m.shortName || m.symbol || String(symbol),
+        kind: inst?.kind || (m.instrumentType || '').toLowerCase() || 'stock',
         currency: m.currency || 'USD',
         range: req.query.range || '1d',
         price: isFinite(m.regularMarketPrice) ? m.regularMarketPrice : (pts.at(-1)?.[1] ?? null),

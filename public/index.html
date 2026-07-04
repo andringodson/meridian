@@ -95,6 +95,10 @@
         <h1 class="stage-title">Markets</h1>
         <span class="mkt-sub" id="mkt-updated">Live trends · quotes may be delayed</span>
       </div>
+      <form class="mkt-search" id="mkt-search" role="search" autocomplete="off">
+        <input id="mkt-search-input" type="search" placeholder="Search any ticker — AAPL, BTC-USD…" aria-label="Search tickers" />
+        <div class="mkt-results" id="mkt-results" hidden></div>
+      </form>
     </div>
 
     <div class="mkt-detail" id="mkt-detail">
@@ -115,6 +119,17 @@
         <canvas id="mkt-chart"></canvas>
         <div class="mkt-tip" id="mkt-tip" hidden></div>
       </div>
+    </div>
+
+    <div class="mkt-movers" id="mkt-movers"><!-- rendered --></div>
+
+    <div class="mkt-filters" id="mkt-filters" aria-label="Instrument type">
+      <button class="rng is-active" data-kind="all">All</button>
+      <button class="rng" data-kind="index">Indices</button>
+      <button class="rng" data-kind="stock">Stocks</button>
+      <button class="rng" data-kind="crypto">Crypto</button>
+      <button class="rng" data-kind="commodity">Commodities</button>
+      <button class="rng" data-kind="fx">FX</button>
     </div>
 
     <div class="mkt-grid" id="mkt-grid"><!-- rendered --></div>

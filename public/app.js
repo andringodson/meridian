@@ -299,9 +299,11 @@ async function loadMarkets() {
     const data = await r.json();
     if (!data.quotes || !data.quotes.length) return;
     lastQuotes = data.quotes;
-    const one = data.quotes.map(tickHTML).join('');
+    // Marquee stays a world-markets tape; individual stocks live in the grid.
+    const tape = data.quotes.filter((q) => q.kind !== 'stock');
+    const one = tape.map(tickHTML).join('');
     track.innerHTML = one + one; // duplicate for a seamless marquee loop
-    if (marketsOpen) renderMarketGrid();
+    if (marketsOpen) { renderMarketGrid(); renderMovers(); }
     const upd = $('#mkt-updated');
     if (upd) upd.textContent = `Updated ${new Date(data.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · auto-refreshing · quotes may be delayed`;
   } catch { /* leave prior ticker in place */ }
@@ -352,10 +354,12 @@ function drawSpark(cv, values, pct) {
   ctx.fillStyle = g; ctx.fill();
 }
 
+let gridKind = 'all';
 function renderMarketGrid() {
   const grid = $('#mkt-grid');
   if (!grid || !lastQuotes.length) return;
-  grid.innerHTML = lastQuotes.map((q) => `
+  const shown = gridKind === 'all' ? lastQuotes : lastQuotes.filter((q) => q.kind === gridKind);
+  grid.innerHTML = shown.map((q) => `
     <button class="mkt-card${q.symbol === detailSymbol ? ' is-active' : ''}" data-sym="${esc(q.symbol)}">
       <div class="mkt-card-top">
         <span class="mkt-label">${esc(q.label)}</span>
@@ -368,7 +372,7 @@ function renderMarketGrid() {
       </div>
     </button>`).join('');
   grid.querySelectorAll('.mkt-card').forEach((card, i) => {
-    drawSpark(card.querySelector('.mkt-spark'), lastQuotes[i].spark, lastQuotes[i].changePct);
+    drawSpark(card.querySelector('.mkt-spark'), shown[i].spark, shown[i].changePct);
     card.addEventListener('click', () => {
       detailSymbol = card.dataset.sym;
       grid.querySelectorAll('.mkt-card').forEach((c) => c.classList.toggle('is-active', c === card));
@@ -491,12 +495,89 @@ $('#mkt-ranges')?.addEventListener('click', (e) => {
   loadDetail();
 });
 
+/* movers: today's biggest stock gainers and losers, click to chart */
+function moverHTML(q) {
+  return `<button class="mover" data-sym="${esc(q.symbol)}">
+    <span class="mover-name">${esc(q.label)}</span>
+    <span class="mover-price">${fmtPrice(q.price)}</span>
+    ${chgHTML(q.changePct)}
+  </button>`;
+}
+function renderMovers() {
+  const el = $('#mkt-movers');
+  const stocks = lastQuotes.filter((q) => q.kind === 'stock');
+  if (!el || stocks.length < 6) return;
+  const sorted = [...stocks].sort((a, b) => b.changePct - a.changePct);
+  el.innerHTML = `
+    <div class="movers-col">
+      <div class="movers-title">Top gainers</div>
+      ${sorted.slice(0, 3).map(moverHTML).join('')}
+    </div>
+    <div class="movers-col">
+      <div class="movers-title">Top losers</div>
+      ${sorted.slice(-3).reverse().map(moverHTML).join('')}
+    </div>`;
+  el.querySelectorAll('.mover').forEach((b) =>
+    b.addEventListener('click', () => selectSymbol(b.dataset.sym)));
+}
+
+function selectSymbol(sym) {
+  detailSymbol = sym;
+  document.querySelectorAll('.mkt-card').forEach((c) => c.classList.toggle('is-active', c.dataset.sym === sym));
+  loadDetail();
+  $('#mkt-detail')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/* instrument-type filter chips */
+$('#mkt-filters')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-kind]'); if (!btn) return;
+  gridKind = btn.dataset.kind;
+  $('#mkt-filters').querySelectorAll('.rng').forEach((b) => b.classList.toggle('is-active', b === btn));
+  renderMarketGrid();
+});
+
+/* ticker search: type a name or symbol, chart anything Yahoo knows */
+const mktSearchInput = $('#mkt-search-input');
+const mktResults = $('#mkt-results');
+let mktSearchTimer = null;
+function hideMktResults() { if (mktResults) mktResults.hidden = true; }
+mktSearchInput?.addEventListener('input', () => {
+  clearTimeout(mktSearchTimer);
+  const q = mktSearchInput.value.trim();
+  if (q.length < 2) { hideMktResults(); return; }
+  mktSearchTimer = setTimeout(async () => {
+    try {
+      const r = await fetch(`/api/markets?search=${encodeURIComponent(q)}`);
+      const data = await r.json();
+      const list = (data.matches || []).slice(0, 6);
+      if (!list.length) { hideMktResults(); return; }
+      mktResults.innerHTML = list.map((m) => `
+        <button class="mkt-result" data-sym="${esc(m.symbol)}">
+          <span class="res-sym">${esc(m.symbol)}</span>
+          <span class="res-name">${esc(m.name)}</span>
+          <span class="res-exch">${esc(m.exch)}</span>
+        </button>`).join('');
+      mktResults.hidden = false;
+      mktResults.querySelectorAll('.mkt-result').forEach((b) =>
+        b.addEventListener('click', () => { selectSymbol(b.dataset.sym); hideMktResults(); mktSearchInput.value = b.dataset.sym; }));
+    } catch { hideMktResults(); }
+  }, 250);
+});
+$('#mkt-search')?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const first = mktResults?.querySelector('.mkt-result');
+  if (first) { first.click(); return; }
+  const raw = mktSearchInput.value.trim().toUpperCase();
+  if (raw) { selectSymbol(raw); hideMktResults(); }
+});
+document.addEventListener('click', (e) => { if (!e.target.closest('.mkt-search')) hideMktResults(); });
+
 function showMarkets(on) {
   marketsOpen = on;
   document.body.classList.toggle('view-markets', on);
   $('#markets-view').hidden = !on;
   if (on) {
-    if (lastQuotes.length) renderMarketGrid(); else loadMarkets();
+    if (lastQuotes.length) { renderMarketGrid(); renderMovers(); } else loadMarkets();
     loadDetail();
   }
 }
