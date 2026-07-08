@@ -18,8 +18,21 @@ const REFRESH_MS = 90_000;
 const CAT_LABEL = {
   top: 'Top stories', world: 'World', business: 'Business',
   technology: 'Technology', science: 'Science', health: 'Health',
-  sports: 'Sports', entertainment: 'Culture',
+  sports: 'Sports', entertainment: 'Culture', saved: 'Saved stories',
 };
+
+/* ---------- saved stories (localStorage, keyed by link) ---------- */
+const SAVE_KEY = 'meridian-saved';
+function getSaved() {
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || []; } catch { return []; }
+}
+function isSaved(link) { return getSaved().some((a) => a.link === link); }
+function toggleSave(article) {
+  let list = getSaved();
+  if (list.some((a) => a.link === article.link)) list = list.filter((a) => a.link !== article.link);
+  else list = [article, ...list].slice(0, 100);
+  localStorage.setItem(SAVE_KEY, JSON.stringify(list));
+}
 
 /* deterministic cinematic gradient for stories without an image */
 const GRADIENTS = [
@@ -52,7 +65,8 @@ function cardHTML(a, lead, i) {
     : `<div class="thumb noimg" style="background-image:${gradientFor(a.title)}">
          <span class="glyph">${esc((a.source || '?').trim().charAt(0).toUpperCase())}</span>
        </div>`;
-  return `<a class="card${lead ? ' lead' : ''}" style="--i:${i}" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">
+  const saved = isSaved(a.link);
+  return `<a class="card${lead ? ' lead' : ''}${a.image ? ' has-img' : ''}" style="--i:${i}" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">
     ${thumb}
     <div class="card-body">
       <div class="headline">${esc(a.title)}</div>
@@ -61,6 +75,14 @@ function cardHTML(a, lead, i) {
         <span class="source">${esc(a.source || 'Source')}</span>
         <span class="dot-sep"></span>
         <span>${timeAgo(a.publishedAt)}</span>
+        <span class="acts">
+          <button class="act act-save${saved ? ' on' : ''}" data-link="${esc(a.link)}" aria-label="${saved ? 'Remove from saved' : 'Save for later'}" title="${saved ? 'Saved' : 'Save'}">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="${saved ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
+          </button>
+          <button class="act act-share" data-link="${esc(a.link)}" data-title="${esc(a.title)}" aria-label="Share story" title="Share">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.7l6.8-4.4M8.6 13.3l6.8 4.4"/></svg>
+          </button>
+        </span>
       </div>
     </div>
   </a>`;
@@ -86,6 +108,14 @@ function setLive(ok) {
 async function loadNews(cat, { skeleton = true } = {}) {
   currentCat = cat;
   stageTitle.textContent = CAT_LABEL[cat] || 'Stories';
+  if (cat === 'saved') {
+    currentArticles = getSaved();
+    lastFetch = Date.now();
+    applySearch();
+    updatedEl.textContent = `${currentArticles.length} saved on this device`;
+    if (!currentArticles.length) feedEl.innerHTML = `<p class="empty">Nothing saved yet — tap the bookmark on any story.</p>`;
+    return;
+  }
   if (skeleton) renderSkeleton();
   try {
     const r = await fetch(`/api/news?category=${encodeURIComponent(cat)}`, { cache: 'no-store' });
@@ -103,9 +133,10 @@ async function loadNews(cat, { skeleton = true } = {}) {
   }
 }
 
+let historyType = 'events';
 async function loadHistory() {
   try {
-    const r = await fetch('/api/wiki', { cache: 'no-store' });
+    const r = await fetch(`/api/wiki?type=${historyType}`, { cache: 'no-store' });
     const data = await r.json();
     $('#rail-date').textContent = new Date().toLocaleDateString([], { month: 'long', day: 'numeric' });
     historyEl.innerHTML = (data.events || []).slice(0, 12).map((e) => `
@@ -258,7 +289,7 @@ if (matchMedia('(hover: hover)').matches) {
   $('#tabs').addEventListener('mouseover', (e) => {
     const tab = e.target.closest('.tab');
     clearTimeout(peekTimer);
-    if (!tab || !tab.dataset.cat || tab.classList.contains('is-active')) { hidePeek(); return; }
+    if (!tab || !tab.dataset.cat || tab.dataset.cat === 'saved' || tab.classList.contains('is-active')) { hidePeek(); return; }
     peekTimer = setTimeout(() => showPeek(tab), 180);
   });
   $('#tabs').addEventListener('mouseleave', () => { clearTimeout(peekTimer); peekToken++; hidePeek(); });
@@ -604,6 +635,47 @@ function showMarkets(on) {
   }
 }
 addEventListener('resize', () => { if (marketsOpen && detailData) drawDetail(); }, { passive: true });
+
+/* history strand tabs: Events / Births / Deaths */
+$('#rail-tabs')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.rtab'); if (!btn) return;
+  historyType = btn.dataset.type;
+  document.querySelectorAll('.rtab').forEach((b) => b.classList.toggle('is-active', b === btn));
+  loadHistory();
+});
+
+/* card actions: save-for-later + share (delegated; cards are links) */
+feedEl.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.act'); if (!btn) return;
+  e.preventDefault(); e.stopPropagation();
+  if (btn.classList.contains('act-save')) {
+    const a = currentArticles.find((x) => x.link === btn.dataset.link);
+    if (!a) return;
+    toggleSave(a);
+    const on = isSaved(a.link);
+    btn.classList.toggle('on', on);
+    btn.querySelector('svg').setAttribute('fill', on ? 'currentColor' : 'none');
+    btn.title = on ? 'Saved' : 'Save';
+    if (currentCat === 'saved' && !on) loadNews('saved');
+    return;
+  }
+  if (btn.classList.contains('act-share')) {
+    const url = btn.dataset.link, title = btn.dataset.title;
+    try {
+      if (navigator.share) { await navigator.share({ title, url }); return; }
+      await navigator.clipboard.writeText(url);
+      btn.classList.add('done');
+      setTimeout(() => btn.classList.remove('done'), 1200);
+    } catch { /* user cancelled */ }
+  }
+});
+
+/* reading progress bar */
+const progressEl = $('#progress');
+addEventListener('scroll', () => {
+  const max = document.documentElement.scrollHeight - innerHeight;
+  if (progressEl) progressEl.style.width = `${max > 0 ? (scrollY / max) * 100 : 0}%`;
+}, { passive: true });
 
 /* PWA install */
 let deferredPrompt = null;

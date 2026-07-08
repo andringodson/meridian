@@ -413,3 +413,44 @@ body.view-markets .curators, body.view-markets main { display: none; }
 .mover-price { font-variant-numeric: tabular-nums; color: var(--text-2); }
 
 .mkt-filters { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 16px; }
+
+/* ---------- reading progress bar ---------- */
+.progress {
+  position: fixed; top: 0; left: 0; height: 2px; width: 0; z-index: 90;
+  background: linear-gradient(90deg, var(--accent), #5b8cff);
+  transition: width .12s linear;
+}
+
+/* ---------- magazine hero lead card ---------- */
+.card.lead.has-img { position: relative; }
+.card.lead.has-img .thumb { aspect-ratio: 21 / 9; }
+.card.lead.has-img .card-body {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 72px 26px 20px;
+  background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.62) 40%, rgba(0,0,0,.92) 100%);
+}
+.card.lead.has-img .headline { text-shadow: 0 1px 14px rgba(0,0,0,.6); }
+.card.lead.has-img .summary { color: #cfcfcf; }
+@media (max-width: 640px) { .card.lead.has-img .card-body { padding: 48px 16px 14px; } }
+
+/* ---------- card actions: save + share ---------- */
+.acts { margin-left: auto; display: flex; gap: 2px; }
+.act {
+  background: none; border: 0; color: var(--text-2); cursor: pointer;
+  padding: 4px 6px; border-radius: 6px; display: inline-flex; align-items: center;
+  transition: color .15s, background .15s;
+}
+.act:hover { color: #fff; background: rgba(255,255,255,.08); }
+.act-save.on { color: var(--accent-hi); }
+.act-share.done { color: #35d07f; }
+
+/* ---------- history strand tabs ---------- */
+.rail-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+.rtab {
+  background: none; border: 1px solid var(--border); color: var(--text-2);
+  font: 600 10.5px var(--display); letter-spacing: .06em; text-transform: uppercase;
+  padding: 5px 11px; border-radius: 999px; cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.rtab:hover { color: var(--text); border-color: #333; }
+.rtab.is-active { color: #fff; border-color: var(--accent); background: rgba(0,0,238,.16); }
