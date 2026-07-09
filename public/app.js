@@ -127,6 +127,7 @@ async function loadNews(cat, { skeleton = true } = {}) {
     const t = new Date(data.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     updatedEl.textContent = data.sources ? `${data.count} stories · ${data.sources} sources · ${t}` : `Updated ${t}`;
     setLive(true);
+    hideBoot();
   } catch (e) {
     setLive(false);
     if (!currentArticles.length) feedEl.innerHTML = `<p class="empty">Couldn’t reach the news service. Retrying…</p>`;
@@ -677,6 +678,60 @@ addEventListener('scroll', () => {
   if (progressEl) progressEl.style.width = `${max > 0 ? (scrollY / max) * 100 : 0}%`;
 }, { passive: true });
 
+/* ---------- video briefs: reel + lightbox player ---------- */
+const vlight = $('#vlight'), vframe = $('#vframe');
+function openVideo(id) {
+  if (!vlight || !vframe) return;
+  vframe.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0"
+    title="Video player" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`;
+  vlight.hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+function closeVideo() {
+  if (!vlight) return;
+  vframe.innerHTML = '';
+  vlight.hidden = true;
+  document.body.style.overflow = '';
+}
+$('#vclose')?.addEventListener('click', closeVideo);
+vlight?.addEventListener('click', (e) => { if (e.target === vlight) closeVideo(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && vlight && !vlight.hidden) closeVideo(); });
+
+async function loadVideos() {
+  const reel = $('#reel'), row = $('#reel-row');
+  if (!reel || !row) return;
+  try {
+    const r = await fetch('/api/videos', { cache: 'no-store' });
+    const data = await r.json();
+    if (!data.videos || !data.videos.length) return;
+    row.innerHTML = data.videos.map((v) => `
+      <button class="vcard" data-id="${esc(v.id)}" title="${esc(v.title)}">
+        <span class="vthumb">
+          <img src="${esc(v.thumbnail)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
+          <span class="vplay" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+          </span>
+        </span>
+        <span class="vtitle">${esc(v.title)}</span>
+        <span class="vmeta">${esc(v.channel)} · ${timeAgo(v.publishedAt)}</span>
+      </button>`).join('');
+    row.querySelectorAll('.vcard').forEach((b) =>
+      b.addEventListener('click', () => openVideo(b.dataset.id)));
+    reel.hidden = false;
+  } catch { /* keep the reel hidden on failure */ }
+}
+
+/* ---------- startup splash ---------- */
+const bootEl = $('#boot');
+let bootDone = false;
+function hideBoot() {
+  if (bootDone || !bootEl) return;
+  bootDone = true;
+  bootEl.classList.add('off');
+  setTimeout(() => bootEl.remove(), 700);
+}
+setTimeout(hideBoot, 2600); // never hold the app hostage
+
 /* PWA install */
 let deferredPrompt = null;
 const installBtn = $('#install');
@@ -706,4 +761,6 @@ toTop?.addEventListener('click', () => scrollTo({ top: 0, behavior: 'smooth' }))
 loadNews('top');
 loadHistory();
 loadMarkets();
+loadVideos();
 setInterval(loadMarkets, 60_000);
+setInterval(loadVideos, 600_000);
