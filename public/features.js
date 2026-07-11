@@ -277,6 +277,66 @@ palInput?.addEventListener('keydown', (e) => {
 });
 palEl?.addEventListener('click', (e) => { if (e.target === palEl) closePalette(); });
 
+/* ---------- Listen: spoken briefing of the loaded headlines ---------- */
+(() => {
+  const btn = $('#listen'), label = $('#listen-label');
+  if (!btn || !('speechSynthesis' in window)) return;
+  btn.hidden = false;
+  let speaking = false;
+
+  function highlight(link) {
+    document.querySelectorAll('.card.reading').forEach((c) => c.classList.remove('reading'));
+    if (!link) return;
+    const card = document.querySelector(`.card[href="${CSS.escape(link)}"]`);
+    if (card) { card.classList.add('reading'); card.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  }
+  function stopListen() {
+    speechSynthesis.cancel();
+    speaking = false;
+    btn.classList.remove('on');
+    label.textContent = 'Listen';
+    highlight(null);
+  }
+  function marketLine() {
+    const sp = lastQuotes.find((q) => q.symbol === '^GSPC');
+    const bt = lastQuotes.find((q) => q.symbol === 'BTC-USD');
+    const bits = [];
+    if (sp) bits.push(`the S and P 500 is ${sp.changePct >= 0 ? 'up' : 'down'} ${Math.abs(sp.changePct).toFixed(1)} percent`);
+    if (bt) bits.push(`Bitcoin is ${bt.changePct >= 0 ? 'up' : 'down'} ${Math.abs(bt.changePct).toFixed(1)} percent`);
+    return bits.length ? `In the markets, ${bits.join(', and ')}.` : '';
+  }
+  btn.addEventListener('click', () => {
+    if (speaking) { stopListen(); return; }
+    const heads = currentArticles.slice(0, 8);
+    if (!heads.length) return;
+    speaking = true;
+    btn.classList.add('on');
+    label.textContent = 'Stop';
+    const queue = [
+      { text: `Here is your ${(CAT_LABEL[currentCat] || 'news').toLowerCase()} briefing from Meridian.`, link: null },
+      ...heads.map((a, i) => ({ text: `${i + 1}. ${a.title}. From ${a.source}.`, link: a.link })),
+    ];
+    const mkt = marketLine();
+    if (mkt) queue.push({ text: mkt, link: null });
+    queue.push({ text: 'That was your briefing.', link: null });
+    let qi = 0;
+    const next = () => {
+      if (!speaking || qi >= queue.length) { stopListen(); return; }
+      const item = queue[qi++];
+      const u = new SpeechSynthesisUtterance(item.text);
+      u.rate = 1.03;
+      u.onstart = () => highlight(item.link);
+      u.onend = next;
+      u.onerror = stopListen;
+      speechSynthesis.speak(u);
+    };
+    next();
+  });
+  // switching sections mid-briefing stops it
+  $('#tabs')?.addEventListener('click', () => { if (speaking) stopListen(); });
+  addEventListener('beforeunload', () => speechSynthesis.cancel());
+})();
+
 /* ---------- global keyboard shortcuts ---------- */
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {

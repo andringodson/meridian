@@ -653,6 +653,19 @@ html, body { overscroll-behavior-y: contain; }
 .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation: none !important; transition: none !important; }
 .reduce-motion #fx { display: none; }
 
+/* ---------- listen briefing ---------- */
+.stage-tools { display: flex; align-items: center; gap: 12px; }
+.listen {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: 1px solid var(--border); color: var(--text-2); cursor: pointer;
+  font: 600 11.5px var(--display); letter-spacing: .04em; padding: 6px 13px; border-radius: 999px;
+  transition: color .15s, border-color .15s;
+}
+.listen:hover { color: var(--text); border-color: #333; }
+.listen.on { color: #fff; border-color: var(--accent); background: rgba(0,0,238,.16); }
+.card.reading { border-color: var(--accent); }
+.card.reading .headline { color: #fff; }
+
 /* ---------- command palette ---------- */
 .palette {
   position: fixed; inset: 0; z-index: 170; background: rgba(0,0,0,.72);
