@@ -19,6 +19,7 @@ const CAT_LABEL = {
   top: 'Top stories', world: 'World', business: 'Business',
   technology: 'Technology', science: 'Science', health: 'Health',
   sports: 'Sports', entertainment: 'Culture', saved: 'Saved stories',
+  foryou: 'For You',
 };
 
 /* ---------- saved stories (localStorage, keyed by link) ---------- */
@@ -87,7 +88,8 @@ pillEl.addEventListener('click', () => {
 });
 
 function cardHTML(a, lead, i) {
-  const thumb = a.image
+  const showImg = a.image && !document.documentElement.classList.contains('data-saver');
+  const thumb = showImg
     ? `<div class="thumb"><img src="${esc(a.image)}" alt="" loading="lazy" decoding="async"
          referrerpolicy="no-referrer"
          onerror="this.parentElement.classList.add('noimg');this.parentElement.style.backgroundImage='${gradientFor(a.title)}';this.remove();" /></div>`
@@ -95,7 +97,7 @@ function cardHTML(a, lead, i) {
          <span class="glyph">${esc((a.source || '?').trim().charAt(0).toUpperCase())}</span>
        </div>`;
   const saved = isSaved(a.link);
-  return `<a class="card${lead ? ' lead' : ''}${a.image ? ' has-img' : ''}" style="--i:${i}" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">
+  return `<a class="card${lead ? ' lead' : ''}${showImg ? ' has-img' : ''}" style="--i:${i}" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">
     ${thumb}
     <div class="card-body">
       <div class="headline">${esc(a.title)}</div>
@@ -152,6 +154,24 @@ async function loadNews(cat, { skeleton = true } = {}) {
     applySearch();
     updatedEl.textContent = `${currentArticles.length} saved on this device`;
     if (!currentArticles.length) feedEl.innerHTML = `<p class="empty">Nothing saved yet — tap the bookmark on any story.</p>`;
+    return;
+  }
+  if (cat === 'foryou') {
+    if (skeleton) renderSkeleton();
+    try {
+      currentArticles = typeof buildForYou === 'function' ? await buildForYou() : [];
+      lastFetch = Date.now();
+      applySearch();
+      if (currentArticles.length) {
+        renderCurators(currentArticles);
+        updatedEl.textContent = `${currentArticles.length} stories matching your topics`;
+      } else {
+        updatedEl.textContent = '';
+        feedEl.innerHTML = `<p class="empty">Follow some topics in Settings (the gear icon) and your personal feed appears here.</p>`;
+      }
+      setLive(true);
+      hideBoot();
+    } catch { setLive(false); }
     return;
   }
   if (skeleton) renderSkeleton();
@@ -805,7 +825,16 @@ const toTop = $('#to-top');
 addEventListener('scroll', () => { toTop.hidden = scrollY < 600; }, { passive: true });
 toTop?.addEventListener('click', () => scrollTo({ top: 0, behavior: 'smooth' }));
 
-/* boot */
+/* boot — honor the "open at launch" preference (set in Settings) */
+const bootTab = (() => {
+  try { return (JSON.parse(localStorage.getItem('meridian-settings')) || {}).defaultTab; } catch { return null; }
+})();
+if (bootTab === 'markets' || bootTab === 'foryou') {
+  // defer one tick so features.js (loaded after this file) is ready
+  setTimeout(() => {
+    $(bootTab === 'markets' ? '.tab[data-view="markets"]' : `.tab[data-cat="${bootTab}"]`)?.click();
+  }, 0);
+}
 loadNews('top');
 loadHistory();
 loadMarkets();
