@@ -891,16 +891,20 @@ const toTop = $('#to-top');
 addEventListener('scroll', () => { toTop.hidden = scrollY < 600; }, { passive: true });
 toTop?.addEventListener('click', () => scrollTo({ top: 0, behavior: 'smooth' }));
 
-/* boot — honor the "open at launch" preference (set in Settings) */
+/* boot — PWA shortcut URL params win, then the "open at launch" preference */
 const bootTab = (() => {
+  const p = new URLSearchParams(location.search);
+  if (p.get('view') === 'markets') return 'markets';
+  if (p.get('cat')) return p.get('cat');
   try { return (JSON.parse(localStorage.getItem('meridian-settings')) || {}).defaultTab; } catch { return null; }
 })();
-if (bootTab === 'markets' || bootTab === 'foryou') {
+if (bootTab === 'markets' || bootTab === 'foryou' || bootTab === 'saved') {
   // defer one tick so features.js (loaded after this file) is ready
   setTimeout(() => {
     $(bootTab === 'markets' ? '.tab[data-view="markets"]' : `.tab[data-cat="${bootTab}"]`)?.click();
   }, 0);
 }
+
 loadNews('top');
 loadHistory();
 loadMarkets();

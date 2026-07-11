@@ -9,6 +9,11 @@
   "theme_color": "#000000",
   "categories": ["news", "finance", "education"],
   "icons": [
-    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Markets", "url": "/?view=markets", "description": "Live market analysis" },
+    { "name": "Saved stories", "url": "/?cat=saved", "description": "Your reading list" }
   ]
 }
