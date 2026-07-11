@@ -563,3 +563,17 @@ body.view-markets .reel { display: none; }
   .tab { scroll-snap-align: start; }
   .to-top { bottom: calc(76px + env(safe-area-inset-bottom)); }
 }
+
+/* ---------- pull-to-refresh indicator ---------- */
+html, body { overscroll-behavior-y: contain; }
+.ptr {
+  position: fixed; top: -44px; left: 50%; transform: translateX(-50%); z-index: 85;
+  width: 38px; height: 38px; border-radius: 50%;
+  background: #0a0a0a; border: 1px solid var(--border); color: var(--text-2);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .15s; pointer-events: none;
+}
+.ptr.show { opacity: 1; }
+.ptr.ready { color: var(--accent-hi); border-color: var(--accent); }
+.ptr.spin svg { animation: ptr-spin .7s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
