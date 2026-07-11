@@ -57,6 +57,35 @@ function timeAgo(iso) {
 }
 const esc = (s = '') => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+/* ---------- toast notifications ---------- */
+const toastEl = document.createElement('div');
+toastEl.className = 'toast';
+toastEl.setAttribute('role', 'status');
+document.body.appendChild(toastEl);
+let toastTimer = null;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+}
+addEventListener('offline', () => toast('You’re offline — showing cached stories'));
+addEventListener('online', () => toast('Back online'));
+
+/* ---------- "new stories" pill: polls never yank the page mid-read ---------- */
+const pillEl = document.createElement('button');
+pillEl.className = 'new-pill';
+pillEl.hidden = true;
+document.body.appendChild(pillEl);
+let pendingNews = null;
+pillEl.addEventListener('click', () => {
+  if (!pendingNews) return;
+  applyNews(pendingNews);
+  pendingNews = null;
+  pillEl.hidden = true;
+  scrollTo({ top: 0, behavior: 'smooth' });
+});
+
 function cardHTML(a, lead, i) {
   const thumb = a.image
     ? `<div class="thumb"><img src="${esc(a.image)}" alt="" loading="lazy" decoding="async"
@@ -105,9 +134,18 @@ function setLive(ok) {
   $('.live-label', liveEl).textContent = ok ? 'LIVE' : 'OFFLINE';
 }
 
+function applyNews(data) {
+  currentArticles = data.articles || [];
+  applySearch();
+  renderCurators(currentArticles);
+  const t = new Date(data.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  updatedEl.textContent = data.sources ? `${data.count} stories · ${data.sources} sources · ${t}` : `Updated ${t}`;
+}
+
 async function loadNews(cat, { skeleton = true } = {}) {
   currentCat = cat;
   stageTitle.textContent = CAT_LABEL[cat] || 'Stories';
+  if (skeleton) { pendingNews = null; pillEl.hidden = true; } // stale offer dies with the view
   if (cat === 'saved') {
     currentArticles = getSaved();
     lastFetch = Date.now();
@@ -120,12 +158,20 @@ async function loadNews(cat, { skeleton = true } = {}) {
   try {
     const r = await fetch(`/api/news?category=${encodeURIComponent(cat)}`, { cache: 'no-store' });
     const data = await r.json();
-    currentArticles = data.articles || [];
     lastFetch = Date.now();
-    applySearch();
-    renderCurators(currentArticles);
-    const t = new Date(data.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    updatedEl.textContent = data.sources ? `${data.count} stories · ${data.sources} sources · ${t}` : `Updated ${t}`;
+    // Background poll while the reader is scrolled down: offer, don't yank.
+    if (!skeleton && scrollY > 300 && currentArticles.length) {
+      const have = new Set(currentArticles.map((a) => a.link));
+      const fresh = (data.articles || []).filter((a) => !have.has(a.link)).length;
+      if (fresh > 0) {
+        pendingNews = data;
+        pillEl.textContent = `↑ ${fresh} new ${fresh === 1 ? 'story' : 'stories'}`;
+        pillEl.hidden = false;
+        setLive(true);
+        return;
+      }
+    }
+    applyNews(data);
     setLive(true);
     hideBoot();
   } catch (e) {
@@ -657,6 +703,7 @@ feedEl.addEventListener('click', async (e) => {
     btn.classList.toggle('on', on);
     btn.querySelector('svg').setAttribute('fill', on ? 'currentColor' : 'none');
     btn.title = on ? 'Saved' : 'Save';
+    toast(on ? 'Saved for later' : 'Removed from saved');
     if (currentCat === 'saved' && !on) loadNews('saved');
     return;
   }
@@ -665,6 +712,7 @@ feedEl.addEventListener('click', async (e) => {
     try {
       if (navigator.share) { await navigator.share({ title, url }); return; }
       await navigator.clipboard.writeText(url);
+      toast('Link copied');
       btn.classList.add('done');
       setTimeout(() => btn.classList.remove('done'), 1200);
     } catch { /* user cancelled */ }
