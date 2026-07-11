@@ -464,16 +464,56 @@ function drawSpark(cv, values, pct, kind) {
   ctx.fillStyle = g; ctx.fill();
 }
 
+/* watchlist: starred symbols, persisted on-device */
+const WATCH_KEY = 'meridian-watchlist';
+function getWatch() { try { return JSON.parse(localStorage.getItem(WATCH_KEY)) || []; } catch { return []; } }
+function toggleWatch(sym) {
+  let w = getWatch();
+  w = w.includes(sym) ? w.filter((s) => s !== sym) : [...w, sym].slice(0, 24);
+  localStorage.setItem(WATCH_KEY, JSON.stringify(w));
+  return w.includes(sym);
+}
+// pseudo-quotes for watchlist symbols outside the built-in instrument set
+const extraQuotes = new Map();
+async function loadExtraWatch() {
+  const known = new Set(lastQuotes.map((q) => q.symbol));
+  const need = getWatch().filter((s) => !known.has(s)).slice(0, 6);
+  await Promise.allSettled(need.map(async (s) => {
+    const r = await fetch(`/api/markets?symbol=${encodeURIComponent(s)}&range=1d`);
+    const d = await r.json();
+    if (!d.points || !d.points.length) return;
+    const last = d.points[d.points.length - 1][1];
+    const prev = d.prevClose ?? d.points[0][1];
+    extraQuotes.set(d.symbol, {
+      symbol: d.symbol, label: d.label, kind: d.kind || 'stock',
+      price: last, prevClose: prev,
+      changePct: prev ? Math.round(((last - prev) / prev) * 10000) / 100 : 0,
+      spark: d.points.map((p) => p[1]).slice(-80),
+    });
+  }));
+}
+
 let gridKind = 'all';
 function renderMarketGrid() {
   const grid = $('#mkt-grid');
   if (!grid || !lastQuotes.length) return;
-  const shown = gridKind === 'all' ? lastQuotes : lastQuotes.filter((q) => q.kind === gridKind);
+  const watch = getWatch();
+  const shown = gridKind === 'all' ? lastQuotes
+    : gridKind === 'watch'
+      ? [...lastQuotes, ...extraQuotes.values()].filter((q) => watch.includes(q.symbol))
+      : lastQuotes.filter((q) => q.kind === gridKind);
+  if (!shown.length && gridKind === 'watch') {
+    grid.innerHTML = `<p class="empty">Nothing starred yet — tap the ★ on any instrument to build your watchlist.</p>`;
+    return;
+  }
   grid.innerHTML = shown.map((q) => `
     <button class="mkt-card${q.symbol === detailSymbol ? ' is-active' : ''}" data-sym="${esc(q.symbol)}">
       <div class="mkt-card-top">
         <span class="mkt-label">${esc(q.label)}</span>
-        <span class="mkt-kind" style="color:${hueOf(q.kind)}">${esc(q.kind)}</span>
+        <span class="mkt-top-right">
+          <span class="mkt-kind" style="color:${hueOf(q.kind)}">${esc(q.kind)}</span>
+          <span class="wstar${watch.includes(q.symbol) ? ' on' : ''}" data-sym="${esc(q.symbol)}" role="button" tabindex="0" aria-label="Toggle watchlist" title="Watchlist">★</span>
+        </span>
       </div>
       <canvas class="mkt-spark" width="120" height="36" aria-hidden="true"></canvas>
       <div class="mkt-card-bottom">
@@ -483,7 +523,16 @@ function renderMarketGrid() {
     </button>`).join('');
   grid.querySelectorAll('.mkt-card').forEach((card, i) => {
     drawSpark(card.querySelector('.mkt-spark'), shown[i].spark, shown[i].changePct, shown[i].kind);
-    card.addEventListener('click', () => {
+    card.addEventListener('click', (e) => {
+      const star = e.target.closest('.wstar');
+      if (star) {
+        e.stopPropagation();
+        const on = toggleWatch(star.dataset.sym);
+        star.classList.toggle('on', on);
+        toast(on ? 'Added to watchlist' : 'Removed from watchlist');
+        if (gridKind === 'watch') renderMarketGrid();
+        return;
+      }
       detailSymbol = card.dataset.sym;
       grid.querySelectorAll('.mkt-card').forEach((c) => c.classList.toggle('is-active', c === card));
       loadDetail();
@@ -560,6 +609,7 @@ function drawDetail() {
 
   // header quote
   $('#mkt-detail-name').textContent = detailData.label;
+  syncDetailWatch();
   $('#mkt-detail-price').textContent = `${fmtPrice(vals[vals.length - 1])} ${detailData.currency || ''}`;
   $('#mkt-detail-chg').outerHTML = chgHTML(Math.round(pct * 100) / 100).replace('class="chg', 'id="mkt-detail-chg" class="chg');
 
@@ -649,11 +699,24 @@ function selectSymbol(sym) {
 }
 
 /* instrument-type filter chips */
-$('#mkt-filters')?.addEventListener('click', (e) => {
+$('#mkt-filters')?.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-kind]'); if (!btn) return;
   gridKind = btn.dataset.kind;
   $('#mkt-filters').querySelectorAll('.rng').forEach((b) => b.classList.toggle('is-active', b === btn));
+  if (gridKind === 'watch') await loadExtraWatch();
   renderMarketGrid();
+});
+
+/* watch star in the detail header follows the charted symbol */
+const detailWatchBtn = $('#detail-watch');
+function syncDetailWatch() {
+  detailWatchBtn?.classList.toggle('on', getWatch().includes(detailSymbol));
+}
+detailWatchBtn?.addEventListener('click', () => {
+  const on = toggleWatch(detailSymbol);
+  syncDetailWatch();
+  toast(on ? 'Added to watchlist' : 'Removed from watchlist');
+  if (gridKind === 'watch') loadExtraWatch().then(renderMarketGrid);
 });
 
 /* ticker search: type a name or symbol, chart anything Yahoo knows */

@@ -131,7 +131,10 @@
     <div class="mkt-detail" id="mkt-detail">
       <div class="mkt-detail-head">
         <div>
-          <div class="mkt-detail-name" id="mkt-detail-name">S&amp;P 500</div>
+          <div class="mkt-detail-name-row">
+            <div class="mkt-detail-name" id="mkt-detail-name">S&amp;P 500</div>
+            <button class="wstar wstar-lg" id="detail-watch" aria-label="Toggle watchlist" title="Add to watchlist">★</button>
+          </div>
           <div class="mkt-detail-quote"><span id="mkt-detail-price">—</span> <span id="mkt-detail-chg" class="chg flat">·</span></div>
         </div>
         <div class="mkt-ranges" id="mkt-ranges" aria-label="Chart range">
@@ -152,6 +155,7 @@
 
     <div class="mkt-filters" id="mkt-filters" aria-label="Instrument type">
       <button class="rng is-active" data-kind="all">All</button>
+      <button class="rng" data-kind="watch">★ Watchlist</button>
       <button class="rng" data-kind="index">Indices</button>
       <button class="rng" data-kind="stock">Stocks</button>
       <button class="rng" data-kind="crypto">Crypto</button>

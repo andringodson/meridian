@@ -652,3 +652,14 @@ html, body { overscroll-behavior-y: contain; }
 .ts-l .card.lead .headline { font-size: clamp(25px, 3.4vw, 38px); }
 .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation: none !important; transition: none !important; }
 .reduce-motion #fx { display: none; }
+
+/* ---------- watchlist stars ---------- */
+.mkt-top-right { display: flex; align-items: baseline; gap: 8px; }
+.wstar {
+  color: #3a3a3a; cursor: pointer; font-size: 14px; line-height: 1;
+  background: none; border: 0; padding: 0; transition: color .15s, transform .15s;
+}
+.wstar:hover { color: var(--text-2); transform: scale(1.15); }
+.wstar.on { color: #f5b942; }
+.wstar-lg { font-size: 19px; }
+.mkt-detail-name-row { display: flex; align-items: center; gap: 10px; }
