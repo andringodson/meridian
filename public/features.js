@@ -277,6 +277,53 @@ palInput?.addEventListener('keydown', (e) => {
 });
 palEl?.addEventListener('click', (e) => { if (e.target === palEl) closePalette(); });
 
+/* ---------- topbar clock ---------- */
+(() => {
+  const clock = $('#clock'); if (!clock) return;
+  const tick = () => {
+    const now = new Date();
+    clock.textContent = `${now.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })} · ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  };
+  tick();
+  setInterval(tick, 30_000);
+})();
+
+/* ---------- weather micro-widget (opt-in geolocation) ---------- */
+(() => {
+  const wx = $('#wx'); if (!wx) return;
+  async function showWeather(lat, lon) {
+    try {
+      const r = await fetch(`/api/weather?lat=${lat}&lon=${lon}`);
+      const d = await r.json();
+      if (!isFinite(d.temp)) return;
+      wx.textContent = `${d.icon} ${d.temp}${d.unit}`;
+      wx.title = `${d.label} · updated ${new Date(d.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      wx.classList.add('has-data');
+    } catch { /* keep previous */ }
+  }
+  function refresh() {
+    const { wxLat, wxLon } = getSettings();
+    if (isFinite(wxLat) && isFinite(wxLon)) showWeather(wxLat, wxLon);
+  }
+  wx.addEventListener('click', () => {
+    const { wxLat, wxLon } = getSettings();
+    if (isFinite(wxLat) && isFinite(wxLon)) { refresh(); return; }
+    if (!navigator.geolocation) { toast('Location not available in this browser'); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = Math.round(pos.coords.latitude * 100) / 100;
+        const lon = Math.round(pos.coords.longitude * 100) / 100;
+        saveSettings({ wxLat: lat, wxLon: lon });
+        showWeather(lat, lon);
+        toast('Weather on — location stays on this device');
+      },
+      () => toast('Location permission declined')
+    );
+  });
+  refresh();
+  setInterval(refresh, 900_000); // 15 min
+})();
+
 /* ---------- Morning Brief: templated 30-second digest ---------- */
 const BRIEF_KEY = 'meridian-brief-dismissed';
 const todayKey = () => new Date().toISOString().slice(0, 10);

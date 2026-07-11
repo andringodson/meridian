@@ -653,6 +653,18 @@ html, body { overscroll-behavior-y: contain; }
 .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation: none !important; transition: none !important; }
 .reduce-motion #fx { display: none; }
 
+/* ---------- topbar clock + weather ---------- */
+.clock { font-size: 12px; color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wx {
+  background: none; border: 1px solid var(--border); color: var(--text-2); cursor: pointer;
+  font-size: 12px; padding: 6px 11px; border-radius: 999px; white-space: nowrap;
+  transition: color .15s, border-color .15s;
+}
+.wx:hover { color: var(--text); border-color: #333; }
+.wx.has-data { color: var(--text); }
+@media (max-width: 900px) { .clock { display: none; } }
+@media (max-width: 560px) { .wx:not(.has-data) { display: none; } }
+
 /* ---------- morning brief ---------- */
 body.view-markets .brief { display: none; }
 .brief {
