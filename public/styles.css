@@ -653,6 +653,33 @@ html, body { overscroll-behavior-y: contain; }
 .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation: none !important; transition: none !important; }
 .reduce-motion #fx { display: none; }
 
+/* ---------- command palette ---------- */
+.palette {
+  position: fixed; inset: 0; z-index: 170; background: rgba(0,0,0,.72);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: flex-start; justify-content: center; padding: 12vh 16px 0;
+}
+.pal-box {
+  width: min(600px, 100%); background: #070707; border: 1px solid var(--border-2);
+  border-radius: 14px; overflow: hidden;
+}
+#pal-input {
+  width: 100%; background: none; border: 0; border-bottom: 1px solid var(--border);
+  color: var(--text); font-size: 15px; padding: 16px 18px; outline: none;
+}
+#pal-input::placeholder { color: #555; }
+.pal-list { max-height: 46vh; overflow-y: auto; padding: 6px; }
+.pal-item {
+  display: flex; align-items: baseline; gap: 12px; width: 100%; text-align: left;
+  background: none; border: 0; border-radius: 8px; color: var(--text);
+  padding: 11px 12px; cursor: pointer; font-size: 13.5px;
+}
+.pal-item.active, .pal-item:hover { background: #111; }
+.pal-ico { color: var(--accent-hi); font-size: 12px; width: 16px; flex: 0 0 16px; }
+.pal-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pal-sub { font-size: 10.5px; color: #555; letter-spacing: .06em; text-transform: uppercase; }
+.pal-empty { color: var(--text-2); font-size: 13px; padding: 18px; text-align: center; }
+
 /* ---------- watchlist stars ---------- */
 .mkt-top-right { display: flex; align-items: baseline; gap: 8px; }
 .wstar {

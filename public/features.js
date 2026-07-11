@@ -170,6 +170,130 @@ $('#set-motion')?.addEventListener('change', (e) => {
   saveSettings({ motion: e.target.checked });
 });
 
+/* ---------- command palette (Ctrl/Cmd+K) ---------- */
+const palEl = $('#palette');
+const palInput = $('#pal-input');
+const palList = $('#pal-list');
+let palIdx = 0;
+let palTicker = null;
+
+function openPalette() {
+  if (!palEl) return;
+  palEl.hidden = false;
+  palInput.value = '';
+  buildPalette('');
+  palInput.focus();
+}
+function closePalette() { if (palEl) palEl.hidden = true; }
+
+function palItem(icon, label, sub, action) {
+  return { icon, label, sub, action };
+}
+function navItems(q) {
+  const items = [];
+  const cats = [['top', 'Top stories'], ['foryou', 'For You'], ['world', 'World'], ['business', 'Business'],
+    ['technology', 'Technology'], ['science', 'Science'], ['health', 'Health'], ['sports', 'Sports'],
+    ['entertainment', 'Culture'], ['saved', 'Saved stories']];
+  for (const [cat, label] of cats) {
+    if (!q || label.toLowerCase().includes(q)) {
+      items.push(palItem('→', `Go to ${label}`, 'section', () => $(`.tab[data-cat="${cat}"]`)?.click()));
+    }
+  }
+  if (!q || 'markets'.includes(q)) {
+    items.push(palItem('→', 'Open Markets', 'section', () => $('.tab[data-view="markets"]')?.click()));
+  }
+  if (!q || 'settings'.includes(q)) items.push(palItem('⚙', 'Open Settings', 'panel', openSheet));
+  return items;
+}
+function shortcutItems() {
+  return [
+    palItem('⌨', '/ — focus story search', 'shortcut', () => $('#search-input')?.focus()),
+    palItem('⌨', '1–8 — switch category · m Markets · s Saved', 'shortcut', () => {}),
+    palItem('⌨', 'Ctrl K — this palette · Esc — close overlays', 'shortcut', () => {}),
+  ];
+}
+async function buildPalette(qRaw) {
+  const q = qRaw.trim().toLowerCase();
+  let items = [];
+  if (q === '?') items = shortcutItems();
+  else {
+    items = navItems(q).slice(0, q ? 4 : 6);
+    if (q) {
+      const stories = currentArticles
+        .filter((a) => (a.title + ' ' + a.source).toLowerCase().includes(q))
+        .slice(0, 5)
+        .map((a) => palItem('¶', a.title, a.source, () => window.open(a.link, '_blank', 'noopener')));
+      items = [...items, ...stories];
+    }
+  }
+  renderPalette(items);
+  if (q.length >= 2 && q !== '?') {
+    clearTimeout(palTicker);
+    palTicker = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/markets?search=${encodeURIComponent(q)}`);
+        const d = await r.json();
+        if (palInput.value.trim().toLowerCase() !== q) return; // stale
+        const ticks = (d.matches || []).slice(0, 4).map((m) =>
+          palItem('▲', `${m.symbol} — ${m.name}`, 'chart', () => {
+            $('.tab[data-view="markets"]')?.click();
+            selectSymbol(m.symbol);
+          }));
+        if (ticks.length) renderPalette([...items, ...ticks]);
+      } catch { /* offline */ }
+    }, 220);
+  }
+}
+let palItems = [];
+function renderPalette(items) {
+  palItems = items;
+  palIdx = 0;
+  palList.innerHTML = items.length ? items.map((it, i) => `
+    <button class="pal-item${i === 0 ? ' active' : ''}" data-i="${i}">
+      <span class="pal-ico">${it.icon}</span>
+      <span class="pal-label">${esc(it.label)}</span>
+      <span class="pal-sub">${esc(it.sub)}</span>
+    </button>`).join('') : `<div class="pal-empty">No matches — try a headline word or a ticker.</div>`;
+  palList.querySelectorAll('.pal-item').forEach((b) =>
+    b.addEventListener('click', () => runPal(+b.dataset.i)));
+}
+function runPal(i) {
+  const it = palItems[i];
+  if (!it) return;
+  closePalette();
+  it.action();
+}
+function movePal(d) {
+  if (!palItems.length) return;
+  palIdx = (palIdx + d + palItems.length) % palItems.length;
+  palList.querySelectorAll('.pal-item').forEach((b, i) => b.classList.toggle('active', i === palIdx));
+  palList.querySelectorAll('.pal-item')[palIdx]?.scrollIntoView({ block: 'nearest' });
+}
+palInput?.addEventListener('input', () => buildPalette(palInput.value));
+palInput?.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); movePal(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); movePal(-1); }
+  else if (e.key === 'Enter') { e.preventDefault(); runPal(palIdx); }
+});
+palEl?.addEventListener('click', (e) => { if (e.target === palEl) closePalette(); });
+
+/* ---------- global keyboard shortcuts ---------- */
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    palEl?.hidden === false ? closePalette() : openPalette();
+    return;
+  }
+  if (e.key === 'Escape') { closePalette(); closeSheet(); return; }
+  const typing = /^(input|textarea|select)$/i.test(document.activeElement?.tagName || '') || e.ctrlKey || e.metaKey || e.altKey;
+  if (typing) return;
+  if (e.key === '/') { e.preventDefault(); $('#search-input')?.focus(); return; }
+  if (e.key >= '1' && e.key <= '8') { $(`.tab[data-cat="${CAT_ORDER[+e.key - 1]}"]`)?.click(); return; }
+  if (e.key === 'm') { $('.tab[data-view="markets"]')?.click(); return; }
+  if (e.key === 's') { $('.tab[data-cat="saved"]')?.click(); return; }
+  if (e.key === 'f') { $('.tab[data-cat="foryou"]')?.click(); return; }
+});
+
 /* ---------- pull-to-refresh (touch, from the very top) ---------- */
 (() => {
   if (!matchMedia('(pointer: coarse)').matches) return;
