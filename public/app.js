@@ -142,6 +142,7 @@ function applyNews(data) {
   renderCurators(currentArticles);
   const t = new Date(data.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   updatedEl.textContent = data.sources ? `${data.count} stories · ${data.sources} sources · ${t}` : `Updated ${t}`;
+  if (typeof renderBrief === 'function') renderBrief();
 }
 
 async function loadNews(cat, { skeleton = true } = {}) {
@@ -201,10 +202,12 @@ async function loadNews(cat, { skeleton = true } = {}) {
 }
 
 let historyType = 'events';
+let lastHistory = [];
 async function loadHistory() {
   try {
     const r = await fetch(`/api/wiki?type=${historyType}`, { cache: 'no-store' });
     const data = await r.json();
+    if (historyType === 'events') lastHistory = data.events || [];
     $('#rail-date').textContent = new Date().toLocaleDateString([], { month: 'long', day: 'numeric' });
     historyEl.innerHTML = (data.events || []).slice(0, 12).map((e) => `
       <li><a href="${esc(e.url || '#')}" target="_blank" rel="noopener noreferrer">
