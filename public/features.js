@@ -297,52 +297,6 @@ searchInput?.addEventListener('blur', () => setTimeout(hideSdrop, 150));
   setInterval(refresh, 900_000); // 15 min
 })();
 
-/* ---------- Morning Brief: templated 30-second digest ---------- */
-const BRIEF_KEY = 'meridian-brief-dismissed';
-const todayKey = () => new Date().toISOString().slice(0, 10);
-$('#brief-close')?.addEventListener('click', () => {
-  localStorage.setItem(BRIEF_KEY, todayKey());
-  $('#brief').hidden = true;
-});
-function renderBrief() {
-  const el = $('#brief'), grid = $('#brief-grid');
-  if (!el || !grid) return;
-  if (localStorage.getItem(BRIEF_KEY) === todayKey()) { el.hidden = true; return; }
-  const heads = currentArticles.slice(0, 3);
-  if (!heads.length) return;
-  const h = new Date().getHours();
-  $('#brief-greet').textContent = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-
-  const stocks = lastQuotes.filter((q) => q.kind === 'stock');
-  const sorted = [...stocks].sort((a, b) => b.changePct - a.changePct);
-  const up = sorted[0], down = sorted[sorted.length - 1];
-  const ev = lastHistory[0];
-
-  grid.innerHTML = `
-    <div class="brief-col">
-      <div class="brief-label">Top headlines</div>
-      ${heads.map((a) => `<a class="brief-item" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">
-        <span class="brief-item-t">${esc(a.title)}</span><span class="brief-item-s">${esc(a.source)}</span></a>`).join('')}
-    </div>
-    <div class="brief-col">
-      <div class="brief-label">Markets pulse</div>
-      ${up ? `<button class="brief-item brief-mkt" data-sym="${esc(up.symbol)}"><span class="brief-item-t">${esc(up.label)}</span>${chgHTML(up.changePct)}</button>` : ''}
-      ${down ? `<button class="brief-item brief-mkt" data-sym="${esc(down.symbol)}"><span class="brief-item-t">${esc(down.label)}</span>${chgHTML(down.changePct)}</button>` : ''}
-      <div class="brief-note">Today's strongest and weakest of the big names.</div>
-    </div>
-    <div class="brief-col">
-      <div class="brief-label">On this day</div>
-      ${ev ? `<a class="brief-item" href="${esc(ev.url || '#')}" target="_blank" rel="noopener noreferrer">
-        <span class="brief-item-t"><strong>${ev.year}</strong> — ${esc(String(ev.text).slice(0, 130))}</span></a>` : '<div class="brief-note">History is loading…</div>'}
-    </div>`;
-  grid.querySelectorAll('.brief-mkt').forEach((b) =>
-    b.addEventListener('click', () => {
-      $('.tab[data-view="markets"]')?.click();
-      selectSymbol(b.dataset.sym);
-    }));
-  el.hidden = false;
-}
-
 /* ---------- Listen: spoken briefing of the loaded headlines ---------- */
 (() => {
   const btn = $('#listen'), label = $('#listen-label');

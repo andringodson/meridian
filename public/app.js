@@ -142,7 +142,6 @@ function applyNews(data) {
   renderCurators(currentArticles);
   const t = new Date(data.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   updatedEl.textContent = data.sources ? `${data.count} stories · ${data.sources} sources · ${t}` : `Updated ${t}`;
-  if (typeof renderBrief === 'function') renderBrief();
 }
 
 async function loadNews(cat, { skeleton = true } = {}) {
