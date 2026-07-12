@@ -814,8 +814,10 @@ addEventListener('scroll', () => {
 
 /* ---------- video briefs: reel + lightbox player ---------- */
 const vlight = $('#vlight'), vframe = $('#vframe');
-function openVideo(id) {
+function openVideo(id, title = '') {
   if (!vlight || !vframe) return;
+  $('#vbar-title').textContent = title;
+  $('#vbar-yt').href = `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
   vframe.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0"
     title="Video player" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`;
   vlight.hidden = false;
@@ -850,7 +852,7 @@ async function loadVideos() {
         <span class="vmeta">${esc(v.channel)} · ${timeAgo(v.publishedAt)}</span>
       </button>`).join('');
     row.querySelectorAll('.vcard').forEach((b) =>
-      b.addEventListener('click', () => openVideo(b.dataset.id)));
+      b.addEventListener('click', () => openVideo(b.dataset.id, b.title)));
     reel.hidden = false;
   } catch { /* keep the reel hidden on failure */ }
 }

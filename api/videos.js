@@ -61,8 +61,30 @@ export default async function handler(req, res) {
     }
     if (!added) break;
   }
-  const videos = mixed
+  const candidates = mixed
     .sort((a, b) => String(b.publishedAt).localeCompare(String(a.publishedAt)))
+    .slice(0, 18);
+
+  // Channels pull or embed-restrict clips (breaking news especially), which
+  // leaves a black player. oEmbed answers 200 only for live, embeddable
+  // videos — drop the rest. Network hiccups keep the video (fail open).
+  const embeddable = await Promise.allSettled(candidates.map(async (v) => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 2500);
+    try {
+      const r = await fetch(
+        `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://youtu.be/${v.id}`)}&format=json`,
+        { signal: ctrl.signal, headers: { 'User-Agent': 'MeridianBot/0.1' } }
+      );
+      return r.ok;
+    } catch {
+      return true; // timeout — don't over-filter
+    } finally {
+      clearTimeout(t);
+    }
+  }));
+  const videos = candidates
+    .filter((_, i) => embeddable[i].status !== 'fulfilled' || embeddable[i].value)
     .slice(0, 14);
 
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=1800');
