@@ -1,6 +1,6 @@
 /* Meridian service worker — app-shell offline support.
    Shell: cache-first. Live API + news links: network-first. */
-const SHELL = 'meridian-shell-v6';
+const SHELL = 'meridian-shell-v7';
 const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/fluid.js', '/features.js', '/logo.svg', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', (e) => {
