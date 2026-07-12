@@ -14,16 +14,10 @@ function setBottomActive(nav) {
 bottomNav?.addEventListener('click', (e) => {
   const btn = e.target.closest('.bn-item'); if (!btn) return;
   const nav = btn.dataset.nav;
-  if (nav === 'videos') {
-    // videos live on the home view — make sure we're there, then scroll
-    if (marketsOpen) $('.tab[data-cat="top"]')?.click();
-    setBottomActive('videos');
-    setTimeout(() => $('#reel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
-    return;
-  }
   setBottomActive(nav);
   if (nav === 'home') { $('.tab[data-cat="top"]')?.click(); scrollTo({ top: 0, behavior: 'smooth' }); }
   else if (nav === 'markets') $('.tab[data-view="markets"]')?.click();
+  else if (nav === 'videos') $('.tab[data-view="videos"]')?.click();
   else if (nav === 'saved') $('.tab[data-cat="saved"]')?.click();
 });
 
@@ -31,6 +25,7 @@ bottomNav?.addEventListener('click', (e) => {
 $('#tabs')?.addEventListener('click', (e) => {
   const tab = e.target.closest('.tab'); if (!tab) return;
   if (tab.dataset.view === 'markets') setBottomActive('markets');
+  else if (tab.dataset.view === 'videos') setBottomActive('videos');
   else if (tab.dataset.cat === 'saved') setBottomActive('saved');
   else setBottomActive('home');
 });

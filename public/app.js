@@ -304,13 +304,14 @@ function applySearch() {
 }
 searchInput.addEventListener('input', applySearch);
 
-/* tabs — categories switch the feed; the Markets tab switches the whole view */
+/* tabs — categories switch the feed; Markets and Videos switch the whole view */
 $('#tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('.tab'); if (!btn) return;
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('is-active', t === btn));
   hidePeek();
-  if (btn.dataset.view === 'markets') { showMarkets(true); return; }
-  showMarkets(false);
+  showMarkets(btn.dataset.view === 'markets');
+  showVideos(btn.dataset.view === 'videos');
+  if (btn.dataset.view) return;
   searchInput.value = '';
   loadNews(btn.dataset.cat);
 });
@@ -763,6 +764,7 @@ function showMarkets(on) {
   document.body.classList.toggle('view-markets', on);
   $('#markets-view').hidden = !on;
   if (on) {
+    if (typeof showVideos === 'function' && videosOpen) showVideos(false);
     if (lastQuotes.length) { renderMarketGrid(); renderMovers(); } else loadMarkets();
     loadDetail();
   }
@@ -847,6 +849,18 @@ $('#vclose')?.addEventListener('click', closeVideo);
 vlight?.addEventListener('click', (e) => { if (e.target === vlight) closeVideo(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && vlight && !vlight.hidden) closeVideo(); });
 
+/* Videos live in their own view (off the home page — YouTube embeds carry
+   YouTube's own pre-roll ads, so they only load when deliberately opened). */
+let videosOpen = false;
+let reelLoaded = false;
+function showVideos(on) {
+  videosOpen = on;
+  document.body.classList.toggle('view-videos', on);
+  const reel = $('#reel');
+  if (reel) reel.hidden = !on;
+  if (on && !reelLoaded) loadVideos();
+}
+
 async function loadVideos() {
   const reel = $('#reel'), row = $('#reel-row');
   if (!reel || !row) return;
@@ -867,7 +881,8 @@ async function loadVideos() {
       </button>`).join('');
     row.querySelectorAll('.vcard').forEach((b) =>
       b.addEventListener('click', () => openVideo(b.dataset.id, b.title, b.dataset.thumb)));
-    reel.hidden = false;
+    reelLoaded = true;
+    reel.hidden = !videosOpen;
   } catch { /* keep the reel hidden on failure */ }
 }
 
@@ -924,6 +939,5 @@ if (bootTab === 'markets' || bootTab === 'foryou' || bootTab === 'saved') {
 loadNews('top');
 loadHistory();
 loadMarkets();
-loadVideos();
 setInterval(loadMarkets, 60_000);
-setInterval(loadVideos, 600_000);
+setInterval(() => { if (reelLoaded) loadVideos(); }, 600_000);

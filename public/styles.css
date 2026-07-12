@@ -487,9 +487,12 @@ body.view-markets .curators, body.view-markets main { display: none; }
 @keyframes boot-bar { from { transform: translateX(-140%); } to { transform: translateX(360%); } }
 @media (prefers-reduced-motion: reduce) { .boot { display: none; } }
 
-/* ---------- video briefs reel ---------- */
+/* ---------- video briefs (own view, off the home page) ---------- */
 body.view-markets .reel { display: none; }
-.reel { max-width: var(--maxw); margin: 0 auto; padding: 4px clamp(16px, 4vw, 40px) 8px; }
+body.view-videos .curators, body.view-videos .brief, body.view-videos main { display: none; }
+.reel { max-width: var(--maxw); margin: 0 auto; padding: 26px clamp(16px, 4vw, 40px) 8px; min-height: 55vh; }
+.view-videos .reel-row { flex-wrap: wrap; }
+.view-videos .vcard { flex: 1 1 240px; max-width: 330px; }
 .reel-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
 .reel-head h2 { font-size: 20px; }
 .reel-sub { font-size: 12px; color: var(--text-2); }
@@ -581,7 +584,7 @@ body.view-markets .reel { display: none; }
   .bottom-nav { display: grid; }
   body { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
   /* the bottom bar covers these — no duplicates in the chip row */
-  .tabs .tab[data-cat="saved"], .tabs .tab-markets { display: none; }
+  .tabs .tab[data-cat="saved"], .tabs .tab-markets, .tabs .tab-videos { display: none; }
   .tabs { scroll-snap-type: x proximity; }
   .tab { scroll-snap-align: start; }
   .to-top { bottom: calc(76px + env(safe-area-inset-bottom)); }
