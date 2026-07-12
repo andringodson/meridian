@@ -813,40 +813,9 @@ addEventListener('scroll', () => {
   if (progressEl) progressEl.style.width = `${max > 0 ? (scrollY / max) * 100 : 0}%`;
 }, { passive: true });
 
-/* ---------- video briefs: reel + lightbox player ---------- */
-const vlight = $('#vlight'), vframe = $('#vframe');
-function playVideo(id) {
-  vframe.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0"
-    title="Video player" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`;
-}
-function openVideo(id, title = '', thumb = '') {
-  if (!vlight || !vframe) return;
-  $('#vbar-title').textContent = title;
-  $('#vbar-yt').href = `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
-  // Stage first: the clip's own thumbnail + play button. The YouTube iframe
-  // only loads on play, so a pulled clip or a blocking extension can never
-  // leave the lightbox as an empty black box.
-  vframe.innerHTML = `
-    <button class="vstage" type="button" aria-label="Play video"
-      ${thumb ? `style="background-image:url('${esc(thumb)}')"` : ''}>
-      <span class="vplay vplay-big" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
-      </span>
-      <span class="vstage-hint">If playback doesn’t start, use “Watch on YouTube” above</span>
-    </button>`;
-  vframe.querySelector('.vstage').addEventListener('click', () => playVideo(id));
-  vlight.hidden = false;
-  document.body.style.overflow = 'hidden';
-}
-function closeVideo() {
-  if (!vlight) return;
-  vframe.innerHTML = '';
-  vlight.hidden = true;
-  document.body.style.overflow = '';
-}
-$('#vclose')?.addEventListener('click', closeVideo);
-vlight?.addEventListener('click', (e) => { if (e.target === vlight) closeVideo(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && vlight && !vlight.hidden) closeVideo(); });
+/* ---------- video briefs: reel of clips that open directly on YouTube.
+   No embedded player — embeds proved unreliable (pulled clips, extensions,
+   pre-roll ads), so a click always opens the real thing in a new tab. ---------- */
 
 /* Videos live in their own view (off the home page — YouTube embeds carry
    YouTube's own pre-roll ads, so they only load when deliberately opened). */
@@ -868,7 +837,8 @@ async function loadVideos() {
     const data = await r.json();
     if (!data.videos || !data.videos.length) return;
     row.innerHTML = data.videos.map((v) => `
-      <button class="vcard" data-id="${esc(v.id)}" data-thumb="${esc(v.thumbnail)}" title="${esc(v.title)}">
+      <a class="vcard" href="https://www.youtube.com/watch?v=${encodeURIComponent(v.id)}"
+         target="_blank" rel="noopener noreferrer" title="${esc(v.title)}">
         <span class="vthumb">
           <img src="${esc(v.thumbnail)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
           <span class="vplay" aria-hidden="true">
@@ -876,10 +846,8 @@ async function loadVideos() {
           </span>
         </span>
         <span class="vtitle">${esc(v.title)}</span>
-        <span class="vmeta">${esc(v.channel)} · ${timeAgo(v.publishedAt)}</span>
-      </button>`).join('');
-    row.querySelectorAll('.vcard').forEach((b) =>
-      b.addEventListener('click', () => openVideo(b.dataset.id, b.title, b.dataset.thumb)));
+        <span class="vmeta">${esc(v.channel)} · ${timeAgo(v.publishedAt)} · YouTube ↗</span>
+      </a>`).join('');
     reelLoaded = true;
     reel.hidden = !videosOpen;
   } catch { /* keep the reel hidden on failure */ }
