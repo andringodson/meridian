@@ -40,7 +40,7 @@ export default async function handler(req, res) {
         };
       });
 
-    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400, stale-if-error=604800');
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.status(200).json({ date: `${mm}-${dd}`, type, count: events.length, events });
   } catch (err) {

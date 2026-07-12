@@ -260,7 +260,7 @@ export default async function handler(req, res) {
   articles = [...imaged, ...interleave(articles.filter((a) => !a.image), 60 - imaged.length)];
 
   // Edge-cache: fresh within 60s, serve slightly stale while revalidating.
-  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=600');
+  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=600, stale-if-error=86400');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.status(200).json({
     category,

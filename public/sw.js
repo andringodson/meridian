@@ -1,6 +1,7 @@
 /* Meridian service worker — app-shell offline support.
-   Shell: cache-first. Live API + news links: network-first. */
-const SHELL = 'meridian-shell-v8';
+   Shell: network-first (deploys apply on next load), cache fallback offline.
+   Live API: network-first. */
+const SHELL = 'meridian-shell-v9';
 const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/fluid.js', '/features.js', '/logo.svg', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', (e) => {
@@ -28,15 +29,13 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // App shell: cache-first, refresh in background.
+  // App shell: network-first so every deploy is live on the next load;
+  // the cache copy only serves when offline.
   e.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request).then((res) => {
-        const copy = res.clone();
-        caches.open(SHELL).then((c) => c.put(request, copy)).catch(() => {});
-        return res;
-      }).catch(() => cached);
-      return cached || network;
-    })
+    fetch(request).then((res) => {
+      const copy = res.clone();
+      caches.open(SHELL).then((c) => c.put(request, copy)).catch(() => {});
+      return res;
+    }).catch(() => caches.match(request))
   );
 });

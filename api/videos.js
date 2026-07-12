@@ -87,7 +87,7 @@ export default async function handler(req, res) {
     .filter((_, i) => embeddable[i].status !== 'fulfilled' || embeddable[i].value)
     .slice(0, 14);
 
-  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=1800');
+  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=1800, stale-if-error=86400');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.status(200).json({ updatedAt: new Date().toISOString(), count: videos.length, videos });
 }

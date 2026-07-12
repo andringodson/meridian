@@ -536,6 +536,21 @@ body.view-markets .reel { display: none; }
 .vbar-yt:hover { text-decoration: underline; }
 .vframe { width: 100%; aspect-ratio: 16 / 9; background: #000; }
 .vframe iframe { width: 100%; height: 100%; border: 0; display: block; }
+.vstage {
+  position: relative; width: 100%; height: 100%; border: 0; cursor: pointer;
+  background: #0a0a0a center / cover no-repeat; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+}
+.vstage::before { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,.35); }
+.vplay-big {
+  position: relative; width: 68px; height: 68px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.65); border: 1.5px solid rgba(255,255,255,.4); color: #fff;
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  transition: background .15s, transform .15s;
+}
+.vstage:hover .vplay-big { background: var(--accent); transform: scale(1.07); }
+.vstage-hint { position: relative; font-size: 11.5px; color: #bbb; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
 .vclose {
   position: absolute; top: 18px; right: 18px; width: 40px; height: 40px; border-radius: 50%;
   background: rgba(255,255,255,.08); border: 1px solid #333; color: #fff; cursor: pointer;

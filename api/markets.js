@@ -113,7 +113,7 @@ export default async function handler(req, res) {
           exch: m.exchDisp || m.exchange || '',
           type: m.quoteType || '',
         }));
-      res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+      res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400, stale-if-error=604800');
       res.status(200).json({ matches });
     } catch {
       res.status(502).json({ error: 'search unavailable' });
@@ -133,7 +133,7 @@ export default async function handler(req, res) {
       const m = result?.meta || {};
       const pts = series(result);
       if (!pts.length) { res.status(404).json({ error: 'no data for symbol' }); return; }
-      res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+      res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300, stale-if-error=86400');
       res.status(200).json({
         symbol: String(symbol),
         label: inst?.label || m.shortName || m.symbol || String(symbol),
@@ -156,6 +156,6 @@ export default async function handler(req, res) {
     .map((r) => (r.status === 'fulfilled' ? r.value : null))
     .filter(Boolean);
 
-  res.setHeader('Cache-Control', 's-maxage=45, stale-while-revalidate=300');
+  res.setHeader('Cache-Control', 's-maxage=45, stale-while-revalidate=300, stale-if-error=86400');
   res.status(200).json({ updatedAt: new Date().toISOString(), count: quotes.length, quotes });
 }

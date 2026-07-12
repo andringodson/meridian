@@ -1,5 +1,37 @@
 # Meridian — Launch & Growth Checklist (all free)
 
+## 0. See your real-time users (2 minutes, do this first)
+
+- [ ] Vercel dashboard → project **meridian** → **Analytics** tab → **Enable
+      Web Analytics** (free tier). The tracking script is already in the site;
+      the moment you click Enable, live visitors, page views, and referrers
+      appear in real time. This is how you'll know which launch post worked.
+
+## 0.5 Ready-to-paste launch copy
+
+**Show HN title:**
+> Show HN: Meridian – real-time news, markets and history, all from open data
+
+**Show HN body:**
+> I built a real-time intelligence dashboard: world news from ~30 publishers'
+> RSS interleaved so no outlet dominates, live-ish market charts from Yahoo's
+> public endpoints, video briefs from newsroom YouTube feeds, and Wikipedia's
+> "on this day". Zero build tools (vanilla JS), zero API keys, zero tracking,
+> free and ad-free. Installable as a PWA with offline support. Would love
+> feedback on the source mixing — every feed is open data.
+
+**Product Hunt tagline (60 chars):**
+> Real-time news, markets & history — free, open data, no ads
+
+**Tweet/X:**
+> Built a thing: Meridian — real-time world news, live market charts, video
+> briefs and daily history, all from open data. No ads, no login, no tracking.
+> Installs like an app. → https://meridian-andrin.vercel.app
+
+**Reddit r/InternetIsBeautiful title:**
+> A free real-time dashboard of world news, markets and history — no ads, no
+> account, built entirely on open data
+
 Everything below costs nothing. Work top to bottom; the first two sections
 compound over time, the rest are one-shot launch pushes.
 

@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     const cur = j?.current;
     if (!cur || !isFinite(cur.temperature_2m)) throw new Error('no data');
     const { icon, label } = describe(cur.weather_code);
-    res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=1800');
+    res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=1800, stale-if-error=86400');
     res.status(200).json({
       temp: Math.round(cur.temperature_2m),
       unit: '°C',
