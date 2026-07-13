@@ -19,6 +19,10 @@ const FEEDS = {
     'https://rss.dw.com/rdf/rss-en-all',
     'https://www.france24.com/en/rss',
     'https://feeds.skynews.com/feeds/rss/home.xml',
+    'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
+    'https://www.theguardian.com/international/rss',
+    'https://www.cbsnews.com/latest/rss/main',
+    'https://www.independent.co.uk/news/rss',
   ],
   world: [
     gnTopic('WORLD'),
@@ -28,6 +32,9 @@ const FEEDS = {
     'https://www.cbc.ca/webfeed/rss/rss-world',
     'https://rss.dw.com/rdf/rss-en-world',
     'https://feeds.skynews.com/feeds/rss/world.xml',
+    'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',
+    'https://www.independent.co.uk/news/world/rss',
+    'https://www.cbsnews.com/latest/rss/world',
   ],
   business: [
     gnTopic('BUSINESS'),
@@ -36,6 +43,9 @@ const FEEDS = {
     'https://www.cnbc.com/id/100003114/device/rss/rss.html',
     'https://feeds.npr.org/1006/rss.xml',
     'https://feeds.skynews.com/feeds/rss/business.xml',
+    'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',
+    'https://fortune.com/feed/',
+    'https://www.independent.co.uk/news/business/rss',
   ],
   technology: [
     gnTopic('TECHNOLOGY'),
@@ -45,6 +55,9 @@ const FEEDS = {
     'https://www.wired.com/feed/rss',
     'https://techcrunch.com/feed/',
     'https://feeds.skynews.com/feeds/rss/technology.xml',
+    'https://www.engadget.com/rss.xml',
+    'https://gizmodo.com/feed',
+    'https://www.cnet.com/rss/news/',
   ],
   science: [
     gnTopic('SCIENCE'),
@@ -52,17 +65,27 @@ const FEEDS = {
     'https://www.theguardian.com/science/rss',
     'https://feeds.npr.org/1007/rss.xml',
     'https://feeds.arstechnica.com/arstechnica/science',
+    'https://www.space.com/feeds/all',
+    'https://www.livescience.com/feeds/all',
+    'https://www.nasa.gov/rss/dyn/breaking_news.rss',
   ],
   health: [
     gnTopic('HEALTH'),
     'https://feeds.npr.org/1128/rss.xml',
     'https://www.theguardian.com/society/health/rss',
+    'https://feeds.bbci.co.uk/news/health/rss.xml',
+    'https://rss.nytimes.com/services/xml/rss/nyt/Health.xml',
+    'https://www.statnews.com/feed/',
+    'https://www.independent.co.uk/topic/health/rss',
   ],
   sports: [
     gnTopic('SPORTS'),
     'https://feeds.bbci.co.uk/sport/rss.xml',
     'https://www.espn.com/espn/rss/news',
     'https://www.theguardian.com/sport/rss',
+    'https://www.skysports.com/rss/12040',
+    'https://sports.yahoo.com/rss/',
+    'https://www.cbssports.com/rss/headlines/',
   ],
   entertainment: [
     gnTopic('ENTERTAINMENT'),
@@ -70,6 +93,10 @@ const FEEDS = {
     'https://feeds.npr.org/1008/rss.xml',
     'https://variety.com/feed/',
     'https://feeds.skynews.com/feeds/rss/entertainment.xml',
+    'https://deadline.com/feed/',
+    'https://www.hollywoodreporter.com/feed/',
+    'https://www.rollingstone.com/feed/',
+    'https://www.billboard.com/feed/',
   ],
 };
 
@@ -116,6 +143,11 @@ function upgradeImage(url) {
   if (!url) return url;
   try {
     let u = url;
+    // Signed resizer URLs must pass through untouched — changing any size
+    // param voids the signature and the CDN serves an error page instead of
+    // the picture. Covers the Guardian (s=<hash> query) and Red Ventures
+    // sites like CNET/ZDNet (40-hex signature in the resize path).
+    if (/i\.guim\.co\.uk/i.test(u) || /\/resize\/[0-9a-f]{40}\//i.test(u)) return u;
     // WordPress / many CMSs: strip "-320x180" style size suffixes → original.
     u = u.replace(/-\d{2,4}x\d{2,4}(\.(jpe?g|png|webp))/i, '$1');
     // BBC ichef: width lives in the path (…/standard/240/… or …/news/240/…).
@@ -129,6 +161,11 @@ function upgradeImage(url) {
   } catch { return url; }
 }
 
+// URLs arrive entity-escaped (processEntities is off); a literal "&#038;" in a
+// query string reads as a fragment marker in the browser and hides the params
+// behind it from upgradeImage.
+const decodeUrl = (u) => String(u).replace(/&amp;|&#0?38;/gi, '&');
+
 // Pick the highest-resolution image RSS offers, from wherever it hides it.
 function extractImage(item) {
   let best = null, bestW = 0;
@@ -137,12 +174,14 @@ function extractImage(item) {
     const url = node['@_url'] || (typeof node === 'string' ? node : null);
     if (!url || !/^https?:\/\//.test(url)) return;
     const w = parseInt(node['@_width'] || 0, 10) || 0;
-    if (!best || w > bestW) { best = url; bestW = w; }
+    if (!best || w > bestW) { best = decodeUrl(url); bestW = w; }
   };
-  const mc = item['media:content'];
+  const mc = item['media:content'] ?? item['media:group']?.['media:content'];
   if (Array.isArray(mc)) mc.forEach(consider); else consider(mc);
-  consider(item['media:thumbnail']);
+  const mt = item['media:thumbnail'] ?? item['media:group']?.['media:thumbnail'];
+  if (Array.isArray(mt)) mt.forEach(consider); else consider(mt);
   consider(item.enclosure);
+  consider(item.image); // CBS-style plain <image> child
   if (!best) {
     // Embedded HTML arrives entity-escaped (processEntities is off) — decode
     // enough of it to find the first <img>. Covers RSS description/encoded
@@ -154,7 +193,7 @@ function extractImage(item) {
       .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&amp;/g, '&');
     const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
-    if (m) best = m[1];
+    if (m) best = decodeUrl(m[1]);
   }
   return upgradeImage(best);
 }
@@ -234,12 +273,12 @@ export default async function handler(req, res) {
 
   // Round-robin across publishers (newest-first within each, capped) so the
   // feed reads as a mix of voices instead of one source's burst.
-  const interleave = (list, limit) => {
+  const interleave = (list, limit, perSource = 10) => {
     const bySource = new Map();
     for (const a of list) {
       const s = a.source.toLowerCase();
       if (!bySource.has(s)) bySource.set(s, []);
-      if (bySource.get(s).length < 8) bySource.get(s).push(a);
+      if (bySource.get(s).length < perSource) bySource.get(s).push(a);
     }
     const queues = [...bySource.values()];
     const out = [];
@@ -253,11 +292,14 @@ export default async function handler(req, res) {
     }
     return out;
   };
-  // Stories with a real preview image fill the page first — interleaved among
-  // themselves so image-rich publishers aren't crowded out by dozens of
-  // imageless wire entries — then imageless items top up the remainder.
-  const imaged = interleave(articles.filter((a) => a.image), 60);
-  articles = [...imaged, ...interleave(articles.filter((a) => !a.image), 60 - imaged.length)];
+  // The page is visual end to end: only stories with a real preview image make
+  // the feed (interleaved across publishers). Imageless wire items are kept
+  // solely as emergency fill when a category can't muster enough pictures.
+  const LIMIT = 80, FLOOR = 40;
+  const imaged = interleave(articles.filter((a) => a.image), LIMIT);
+  articles = imaged.length >= FLOOR
+    ? imaged
+    : [...imaged, ...interleave(articles.filter((a) => !a.image), FLOOR - imaged.length)];
 
   // Edge-cache: fresh within 60s, serve slightly stale while revalidating.
   res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=600, stale-if-error=86400');

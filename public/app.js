@@ -91,8 +91,7 @@ function cardHTML(a, lead, i) {
   const showImg = a.image && !document.documentElement.classList.contains('data-saver');
   const thumb = showImg
     ? `<div class="thumb"><img src="${esc(a.image)}" alt="" loading="lazy" decoding="async"
-         referrerpolicy="no-referrer"
-         onerror="this.parentElement.classList.add('noimg');this.parentElement.style.backgroundImage='${gradientFor(a.title)}';this.remove();" /></div>`
+         referrerpolicy="no-referrer" data-fallback="${gradientFor(a.title)}" /></div>`
     : `<div class="thumb noimg" style="background-image:${gradientFor(a.title)}">
          <span class="glyph">${esc((a.source || '?').trim().charAt(0).toUpperCase())}</span>
        </div>`;
@@ -123,6 +122,21 @@ function renderFeed(list) {
   if (!list.length) { feedEl.innerHTML = `<p class="empty">No stories found.</p>`; return; }
   feedEl.innerHTML = list.map((a, i) => cardHTML(a, i === 0, i)).join('');
 }
+
+// A preview URL that 404s must never show a broken-image icon: swap the thumb
+// to its gradient fallback. Capture phase — img error events don't bubble, and
+// CSP (script-src 'self') rules out inline onerror handlers.
+feedEl.addEventListener('error', (e) => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement)) return;
+  const wrap = img.parentElement;
+  if (wrap?.classList.contains('thumb')) {
+    wrap.classList.add('noimg');
+    wrap.style.backgroundImage = img.dataset.fallback || '';
+    img.closest('.card')?.classList.remove('has-img');
+  }
+  img.remove();
+}, true);
 
 function renderSkeleton(n = 6) {
   feedEl.innerHTML = Array.from({ length: n }).map((_, i) =>
