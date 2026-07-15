@@ -12,6 +12,8 @@ const liveEl = $('#live');
 
 let currentCat = 'top';
 let currentArticles = [];
+let renderedList = [];        // exactly what the feed shows now (post-search) — drives the reader
+let currentNew = new Set();   // links considered "new since last visit" in the current view
 let lastFetch = 0;
 const REFRESH_MS = 90_000;
 
@@ -33,6 +35,67 @@ function toggleSave(article) {
   if (list.some((a) => a.link === article.link)) list = list.filter((a) => a.link !== article.link);
   else list = [article, ...list].slice(0, 100);
   localStorage.setItem(SAVE_KEY, JSON.stringify(list));
+}
+
+/* ---------- "new since last visit" (localStorage, keyed by link) ----------
+   Every headline you're shown is remembered; anything unseen since your last
+   visit is flagged on its card and counted on its category tab. A gentle
+   background sweep keeps the tab counts honest without you opening each one.
+   On a device's very first run we seed silently — there's no "last visit" to
+   compare against, so nothing is falsely marked new. */
+const SEEN_KEY = 'meridian-seen';
+const SEEN_INIT = 'meridian-seen-init';
+const SEEN_CAP = 2500;
+let seenSet = (() => {
+  try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY)) || []); } catch { return new Set(); }
+})();
+const seenReady = () => localStorage.getItem(SEEN_INIT) === '1';
+function persistSeen() {
+  let arr = [...seenSet];
+  if (arr.length > SEEN_CAP) { arr = arr.slice(arr.length - SEEN_CAP); seenSet = new Set(arr); }
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify(arr)); } catch { /* quota */ }
+}
+function addSeen(links) { for (const l of links) if (l) seenSet.add(l); persistSeen(); }
+
+const tabNew = new Map(); // category → unseen count, mirrored onto the tab
+function setTabNew(cat, n) {
+  tabNew.set(cat, n);
+  const tab = document.querySelector(`.tab[data-cat="${cat}"]`);
+  if (!tab) return;
+  let b = tab.querySelector('.tab-new');
+  if (n > 0) {
+    if (!b) { b = document.createElement('span'); b.className = 'tab-new'; tab.appendChild(b); }
+    b.textContent = n > 99 ? '99+' : String(n);
+  } else if (b) { b.remove(); }
+}
+// Snapshot which of these links are new, mark them all seen, clear this tab's badge.
+function computeNew(articles) {
+  const links = articles.map((a) => a.link).filter(Boolean);
+  if (!seenReady()) { addSeen(links); currentNew = new Set(); return; }
+  currentNew = new Set(links.filter((l) => !seenSet.has(l)));
+  addSeen(links);
+  setTabNew(currentCat, 0);
+}
+
+const SWEEP_CATS = ['top', 'world', 'business', 'technology', 'science', 'health', 'sports', 'entertainment'];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let sweeping = false;
+async function sweepNew() {
+  if (sweeping || !navigator.onLine) return;
+  sweeping = true;
+  const ready = seenReady();
+  try {
+    for (const cat of SWEEP_CATS) {
+      try {
+        const arts = await peekData(cat); // reuses the hover-peek cache — cheap
+        const links = arts.map((a) => a.link).filter(Boolean);
+        if (!ready) { for (const l of links) seenSet.add(l); } // seed, no badges
+        else setTabNew(cat, cat === currentCat ? 0 : links.filter((l) => !seenSet.has(l)).length);
+      } catch { /* skip this category */ }
+      await sleep(250); // stagger so the sweep never bursts
+    }
+    if (!ready) { persistSeen(); try { localStorage.setItem(SEEN_INIT, '1'); } catch { /* quota */ } }
+  } finally { sweeping = false; }
 }
 
 /* deterministic cinematic gradient for stories without an image */
@@ -96,7 +159,9 @@ function cardHTML(a, lead, i) {
          <span class="glyph">${esc((a.source || '?').trim().charAt(0).toUpperCase())}</span>
        </div>`;
   const saved = isSaved(a.link);
-  return `<a class="card${lead ? ' lead' : ''}${showImg ? ' has-img' : ''}" style="--i:${i}" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">
+  const fresh = currentNew.has(a.link);
+  return `<a class="card${lead ? ' lead' : ''}${showImg ? ' has-img' : ''}${fresh ? ' is-new' : ''}" style="--i:${i}" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">
+    ${fresh ? '<span class="new-tag">New</span>' : ''}
     ${thumb}
     <div class="card-body">
       <div class="headline">${esc(a.title)}</div>
@@ -119,6 +184,7 @@ function cardHTML(a, lead, i) {
 }
 
 function renderFeed(list) {
+  renderedList = list;
   if (!list.length) { feedEl.innerHTML = `<p class="empty">No stories found.</p>`; return; }
   feedEl.innerHTML = list.map((a, i) => cardHTML(a, i === 0, i)).join('');
 }
@@ -152,6 +218,7 @@ function setLive(ok) {
 
 function applyNews(data) {
   currentArticles = data.articles || [];
+  computeNew(currentArticles);
   applySearch();
   renderCurators(currentArticles);
   const t = new Date(data.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -164,6 +231,7 @@ async function loadNews(cat, { skeleton = true } = {}) {
   if (skeleton) { pendingNews = null; pillEl.hidden = true; } // stale offer dies with the view
   if (cat === 'saved') {
     currentArticles = getSaved();
+    currentNew = new Set(); // saved stories are yours already — never flagged "new"
     lastFetch = Date.now();
     applySearch();
     updatedEl.textContent = `${currentArticles.length} saved on this device`;
@@ -174,6 +242,7 @@ async function loadNews(cat, { skeleton = true } = {}) {
     if (skeleton) renderSkeleton();
     try {
       currentArticles = typeof buildForYou === 'function' ? await buildForYou() : [];
+      computeNew(currentArticles);
       lastFetch = Date.now();
       applySearch();
       if (currentArticles.length) {
@@ -794,7 +863,19 @@ $('#rail-tabs')?.addEventListener('click', (e) => {
 
 /* card actions: save-for-later + share (delegated; cards are links) */
 feedEl.addEventListener('click', async (e) => {
-  const btn = e.target.closest('.act'); if (!btn) return;
+  const btn = e.target.closest('.act');
+  if (!btn) {
+    // Not an action button → a plain click opens the in-app reader. Modified
+    // clicks (⌘/Ctrl/Shift/middle) still open the source in a new tab.
+    const card = e.target.closest('.card');
+    if (!card || card.classList.contains('skeleton')) return;
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const idx = [...feedEl.querySelectorAll('.card')].indexOf(card);
+    if (idx < 0 || !renderedList[idx]) return;
+    e.preventDefault();
+    openReaderFromFeed(idx);
+    return;
+  }
   e.preventDefault(); e.stopPropagation();
   if (btn.classList.contains('act-save')) {
     const a = currentArticles.find((x) => x.link === btn.dataset.link);
@@ -867,6 +948,165 @@ async function loadVideos() {
   } catch { /* keep the reel hidden on failure */ }
 }
 
+/* ---------- story reader ----------
+   Clicking a story opens it here — hero, headline, and a lead-in pulled by
+   /api/read — instead of bouncing straight to the source. Prev/next walk the
+   feed; every reader links out to finish at the original outlet. */
+const reader = document.createElement('div');
+reader.className = 'reader';
+reader.hidden = true;
+reader.innerHTML = `
+  <div class="reader-backdrop" data-rclose></div>
+  <article class="reader-panel" role="dialog" aria-modal="true" aria-label="Story reader">
+    <header class="reader-bar">
+      <button class="reader-btn reader-close" data-rclose aria-label="Close reader" title="Close (Esc)">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        <span>Close</span>
+      </button>
+      <div class="reader-steps">
+        <button class="reader-btn reader-prev" aria-label="Previous story" title="Previous (←)">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <button class="reader-btn reader-next" aria-label="Next story" title="Next (→)">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+    </header>
+    <div class="reader-scroll" id="reader-scroll"></div>
+  </article>`;
+document.body.appendChild(reader);
+const readerScroll = $('#reader-scroll', reader);
+let readerList = [];       // snapshot of the feed at open time — stable under background refreshes
+let readerIndex = -1;
+let readToken = 0;         // cancels a slow /api/read when the reader moves on
+let readerLastFocus = null;
+const readerOpen = () => !reader.hidden;
+
+function renderReaderShell(a) {
+  const hero = a.image
+    ? `<div class="reader-hero"><img src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" data-fallback="${gradientFor(a.title)}" /></div>`
+    : `<div class="reader-hero noimg" style="background-image:${gradientFor(a.title)}"><span class="glyph">${esc((a.source || '?').trim().charAt(0).toUpperCase())}</span></div>`;
+  const saved = isSaved(a.link);
+  readerScroll.innerHTML = `
+    ${hero}
+    <div class="reader-content">
+      <div class="reader-kicker"><span class="reader-src">${esc(a.source || 'Source')}</span><span class="dot-sep"></span><span>${timeAgo(a.publishedAt)}</span></div>
+      <h1 class="reader-title">${esc(a.title)}</h1>
+      <div class="reader-actions">
+        <a class="reader-open" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">Read at ${esc(a.source || 'source')}
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M8 7h9v9"/></svg></a>
+        <button class="reader-act reader-save${saved ? ' on' : ''}" aria-label="Save story"><svg viewBox="0 0 24 24" width="15" height="15" fill="${saved ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span>${saved ? 'Saved' : 'Save'}</span></button>
+        <button class="reader-act reader-share" aria-label="Share story"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.7l6.8-4.4M8.6 13.3l6.8 4.4"/></svg><span>Share</span></button>
+      </div>
+      <div class="reader-body" id="reader-body">
+        ${a.summary ? `<p>${esc(a.summary)}</p>` : ''}
+        <p class="reader-status">Opening the full story…</p>
+      </div>
+    </div>`;
+  readerScroll.scrollTop = 0;
+}
+
+function updateReaderNav() {
+  $('.reader-prev', reader).disabled = readerIndex <= 0;
+  $('.reader-next', reader).disabled = readerIndex >= readerList.length - 1;
+}
+
+const linkOut = (a, site) =>
+  `<p class="reader-cont"><a href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">Continue reading at ${esc(site || a.source || 'the source')} <span aria-hidden="true">↗</span></a></p>`;
+
+async function showReader(index) {
+  const a = readerList[index];
+  if (!a) return;
+  readerIndex = index;
+  const token = ++readToken;
+  updateReaderNav();
+  renderReaderShell(a);
+  try {
+    const r = await fetch(`/api/read?url=${encodeURIComponent(a.link)}`);
+    const d = await r.json();
+    if (token !== readToken) return; // moved to another story
+    const body = $('#reader-body', reader);
+    if (d && d.ok && d.paragraphs && d.paragraphs.length) {
+      body.innerHTML = d.paragraphs.map((p) => `<p>${esc(p)}</p>`).join('') + linkOut(a, d.site);
+    } else {
+      const s = $('.reader-status', body);
+      if (s) s.outerHTML = linkOut(a);
+    }
+  } catch {
+    if (token !== readToken) return;
+    const s = $('.reader-status', reader);
+    if (s) s.outerHTML = linkOut(a);
+  }
+}
+
+function openReaderFromFeed(idx) {
+  readerList = renderedList.slice();          // stable snapshot
+  if (!reader.hidden) return showReader(idx); // already open (unlikely) — just swap
+  readerLastFocus = document.activeElement;
+  reader.hidden = false;
+  document.documentElement.classList.add('reader-lock');
+  showReader(idx);
+  $('.reader-close', reader)?.focus();
+}
+
+function closeReader() {
+  if (reader.hidden) return;
+  reader.hidden = true;
+  readToken++; // drop any in-flight fetch
+  document.documentElement.classList.remove('reader-lock');
+  try { readerLastFocus?.focus(); } catch { /* gone */ }
+}
+
+reader.addEventListener('click', (e) => {
+  if (e.target.closest('[data-rclose]')) { closeReader(); return; }
+  if (e.target.closest('.reader-prev')) { if (readerIndex > 0) showReader(readerIndex - 1); return; }
+  if (e.target.closest('.reader-next')) { if (readerIndex < readerList.length - 1) showReader(readerIndex + 1); return; }
+  const a = readerList[readerIndex];
+  if (!a) return;
+  const save = e.target.closest('.reader-save');
+  if (save) {
+    toggleSave(a);
+    const on = isSaved(a.link);
+    save.classList.toggle('on', on);
+    save.querySelector('svg').setAttribute('fill', on ? 'currentColor' : 'none');
+    save.querySelector('span').textContent = on ? 'Saved' : 'Save';
+    toast(on ? 'Saved for later' : 'Removed from saved');
+    // keep the feed card's bookmark in sync
+    const feedBtn = feedEl.querySelector(`.card[href="${CSS.escape(a.link)}"] .act-save`);
+    if (feedBtn) { feedBtn.classList.toggle('on', on); feedBtn.querySelector('svg').setAttribute('fill', on ? 'currentColor' : 'none'); }
+    if (currentCat === 'saved' && !on) { closeReader(); loadNews('saved'); }
+    return;
+  }
+  if (e.target.closest('.reader-share')) {
+    (async () => {
+      try {
+        if (navigator.share) { await navigator.share({ title: a.title, url: a.link }); return; }
+        await navigator.clipboard.writeText(a.link);
+        toast('Link copied');
+      } catch { /* cancelled */ }
+    })();
+  }
+});
+
+// hero image that 404s → its gradient fallback (mirrors the feed's handling)
+reader.addEventListener('error', (e) => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement)) return;
+  const wrap = img.closest('.reader-hero');
+  if (wrap) { wrap.classList.add('noimg'); wrap.style.backgroundImage = img.dataset.fallback || ''; img.remove(); }
+}, true);
+
+// Reader keys: Esc closes, ←/↑/k previous, →/↓/j next. Capture phase + swallow
+// so the global tab shortcuts don't fire behind an open reader.
+document.addEventListener('keydown', (e) => {
+  if (!readerOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key;
+  if (k === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeReader(); }
+  else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'k') { e.preventDefault(); e.stopImmediatePropagation(); if (readerIndex > 0) showReader(readerIndex - 1); }
+  else if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'j') { e.preventDefault(); e.stopImmediatePropagation(); if (readerIndex < readerList.length - 1) showReader(readerIndex + 1); }
+  else if (k.length === 1 && /[a-z0-9/]/i.test(k)) { e.stopImmediatePropagation(); } // don't leak to tab shortcuts
+}, true);
+
 /* ---------- startup splash ---------- */
 const bootEl = $('#boot');
 let bootDone = false;
@@ -922,3 +1162,5 @@ loadHistory();
 loadMarkets();
 setInterval(loadMarkets, 60_000);
 setInterval(() => { if (reelLoaded) loadVideos(); }, 600_000);
+setTimeout(sweepNew, 2000);          // seed / populate per-tab "new" counts
+setInterval(sweepNew, 300_000);      // and keep them honest every 5 min
