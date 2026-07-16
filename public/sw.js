@@ -1,8 +1,8 @@
 /* Meridian service worker — app-shell offline support.
    Shell: network-first (deploys apply on next load), cache fallback offline.
    Live API: network-first. */
-const SHELL = 'meridian-shell-v14';
-const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/fluid.js', '/features.js', '/logo.svg', '/manifest.webmanifest', '/icons/icon.svg'];
+const SHELL = 'meridian-shell-v15';
+const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/fluid.js', '/features.js', '/fonts/space-grotesk-latin.woff2', '/logo.svg', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

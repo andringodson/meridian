@@ -7,3 +7,7 @@ node_modules/
 Thumbs.db
 
 .vercel
+
+# build output + audit reports
+dist/
+reports/

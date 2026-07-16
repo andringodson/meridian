@@ -9,11 +9,18 @@
   },
   "scripts": {
     "dev": "vercel dev",
-    "start": "vercel dev"
+    "start": "vercel dev",
+    "build": "node scripts/build.mjs",
+    "preview": "node scripts/serve.mjs dist 8080",
+    "check:images": "node scripts/check-images.mjs"
   },
   "author": "Andrin Godson",
   "license": "MIT",
   "dependencies": {
     "fast-xml-parser": "^4.5.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "html-minifier-terser": "^7.2.0"
   }
 }

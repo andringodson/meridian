@@ -104,7 +104,41 @@ never hammered.
 
 ```bash
 npm install
-npx vercel dev      # serves the static app + /api functions at localhost:3000
+npx vercel dev      # static app + /api functions at localhost:3000
+```
+
+## Build & preview
+
+Meridian ships a minified bundle. The build mirrors `public/` into `dist/`,
+minifying JS/CSS with [esbuild] and HTML with html-minifier-terser (same
+filenames, so nothing needs rewiring). Vercel runs it automatically
+(`buildCommand` in `vercel.json`); to run it yourself:
+
+```bash
+npm run build       # → dist/  (minified, ~24% smaller before gzip)
+npm run preview     # serve the built bundle at localhost:8080 (static only)
+```
+
+## Performance
+
+- **Self-hosted display font** — Space Grotesk ships as one variable `woff2`
+  from the same origin, so first paint no longer waits on a third-party font
+  stylesheet + `gstatic` round-trip. The font is cached `immutable` for a year.
+- **Minified bundle** — JS/CSS/HTML are minified on build; long-lived assets
+  (fonts, icons) get immutable caching, code gets revalidated so deploys apply.
+- **Idle-aware client** — news, markets, video and the "new-since-last-visit"
+  sweep all pause while the tab is hidden and run off `requestIdleCallback`, so
+  a backgrounded tab spends almost no network.
+
+## Docker toolchain
+
+A reproducible build/preview/audit environment — *not* the production runtime
+(that's Vercel). Handy for building or benchmarking the bundle on any machine:
+
+```bash
+docker compose up preview                            # build + serve on :8080
+docker compose run --rm build                        # emit dist/ to the host
+docker compose --profile audit run --rm lighthouse   # Lighthouse → ./reports
 ```
 
 ## Deploy
@@ -113,9 +147,11 @@ npx vercel dev      # serves the static app + /api functions at localhost:3000
 vercel deploy --prod
 ```
 
-Hosted on Vercel: static assets on the CDN, `/api/*` as Node serverless
+Hosted on Vercel: the built `dist/` on the CDN, `/api/*` as Node serverless
 functions, and security headers plus a content-security policy applied in
 `vercel.json`.
+
+[esbuild]: https://esbuild.github.io/
 
 ## Roadmap
 

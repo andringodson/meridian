@@ -81,7 +81,7 @@ const SWEEP_CATS = ['top', 'world', 'business', 'technology', 'science', 'health
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let sweeping = false;
 async function sweepNew() {
-  if (sweeping || !navigator.onLine) return;
+  if (sweeping || document.hidden || !navigator.onLine) return;
   sweeping = true;
   const ready = seenReady();
   try {
@@ -449,8 +449,9 @@ if (matchMedia('(hover: hover)').matches) {
   addEventListener('scroll', hidePeek, { passive: true });
 }
 
-/* self-updating: refresh on timer, and when the tab regains focus if stale */
-setInterval(() => loadNews(currentCat, { skeleton: false }), REFRESH_MS);
+/* self-updating: refresh on timer (only while visible — a backgrounded tab
+   spends no network), and immediately when the tab regains focus if stale */
+setInterval(() => { if (!document.hidden) loadNews(currentCat, { skeleton: false }); }, REFRESH_MS);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && Date.now() - lastFetch > REFRESH_MS) loadNews(currentCat, { skeleton: false });
 });
@@ -1160,7 +1161,9 @@ if (bootTab === 'markets' || bootTab === 'foryou' || bootTab === 'saved') {
 loadNews('top');
 loadHistory();
 loadMarkets();
-setInterval(loadMarkets, 60_000);
-setInterval(() => { if (reelLoaded) loadVideos(); }, 600_000);
-setTimeout(sweepNew, 2000);          // seed / populate per-tab "new" counts
-setInterval(sweepNew, 300_000);      // and keep them honest every 5 min
+// Background timers idle out when the tab isn't visible — no wasted requests.
+const onIdle = (fn, timeout) => ('requestIdleCallback' in window ? requestIdleCallback(fn, { timeout }) : setTimeout(fn, timeout));
+setInterval(() => { if (!document.hidden) loadMarkets(); }, 60_000);
+setInterval(() => { if (!document.hidden && reelLoaded) loadVideos(); }, 600_000);
+onIdle(sweepNew, 2500);              // seed / populate per-tab "new" counts, off the critical path
+setInterval(() => { if (!document.hidden) onIdle(sweepNew, 2000); }, 300_000); // keep them honest every 5 min

@@ -1,0 +1,45 @@
+# Meridian — build/preview/audit toolchain (not the production runtime).
+#
+#   docker compose up preview                     # build + serve on :8080
+#   docker compose run --rm build                 # just emit dist/ to the host
+#   docker compose --profile audit run --rm lighthouse   # Lighthouse report → ./reports
+#
+# The live site runs on Vercel; this stack exists to build the minified bundle
+# reproducibly and measure it with Lighthouse against a production-like server.
+
+services:
+  # Serve the built bundle exactly as shipped.
+  preview:
+    build: .
+    image: meridian
+    ports:
+      - "8080:8080"
+
+  # One-shot: run the minify build and drop dist/ onto the host for inspection.
+  # The anonymous volume shadows node_modules so the container's Linux install
+  # never clobbers a host (e.g. Windows/macOS) node_modules.
+  build:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: sh -c "npm ci --no-audit --no-fund && npm run build"
+
+  # Optional: Lighthouse audit of the preview server. Report lands in ./reports.
+  # Uses a Chromium-equipped image; run with the "audit" profile so it stays
+  # out of the default `up`.
+  lighthouse:
+    profiles: ["audit"]
+    image: zenika/alpine-chrome:with-node
+    depends_on:
+      - preview
+    volumes:
+      - ./reports:/reports
+    entrypoint: ["lighthouse"]
+    command: >
+      http://preview:8080
+      --output=html --output=json
+      --output-path=/reports/meridian
+      --chrome-flags="--headless --no-sandbox --disable-gpu"
+      --only-categories=performance,accessibility,best-practices,seo
