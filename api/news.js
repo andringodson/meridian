@@ -152,6 +152,19 @@ function upgradeImage(url) {
     u = u.replace(/-\d{2,4}x\d{2,4}(\.(jpe?g|png|webp))/i, '$1');
     // BBC ichef: width lives in the path (…/standard/240/… or …/news/240/…).
     u = u.replace(/(ichef\.bbci\.co\.uk\/(?:ace\/)?[a-z_]+)\/\d{2,4}\//i, '$1/1024/');
+    // BBC ichef "images/ic" variant sizes with WxH in the path.
+    u = u.replace(/(ichef\.bbci\.co\.uk\/images\/ic)\/\d+x\d+\//i, '$1/1920x1080/');
+    // CBS signs each thumbnail size (resizing the path 404s), but the original
+    // upload lives at the same path minus the /thumbnail/<size>/<hash>/ leg.
+    if (/cbsnewsstatic\.com/i.test(u)) {
+      u = u.replace(/\/thumbnail\/\d+x\d+\/[0-9a-f]{32}\//i, '/');
+    }
+    // NPR's dims3 resizer re-renders on demand; RSS asks for the full crop
+    // (4500px+, seconds-slow). Cap at 1200 wide, keeping the aspect ratio.
+    if (/brightspotcdn\.com\/dims3\//i.test(u)) {
+      u = u.replace(/\/resize\/(\d+)x(\d+)(!?)\//i, (m, w, h, ex) =>
+        +w > 1400 ? `/resize/1200x${Math.round((+h / +w) * 1200)}${ex}/` : m);
+    }
     // Query-sized CDNs (Guardian, WP, Cloudinary, etc.): raise the dimensions.
     u = u.replace(/([?&](?:width|w))=\d+/gi, '$1=1200')
          .replace(/([?&](?:height|h))=\d+/gi, '$1=675')
@@ -166,13 +179,17 @@ function upgradeImage(url) {
 // behind it from upgradeImage.
 const decodeUrl = (u) => String(u).replace(/&amp;|&#0?38;/gi, '&');
 
+// Tracking pixels and other non-pictures that RSS feeds disguise as images
+// (NPR ships a 1×1 rss-pixel as the first <img> of every description).
+const JUNK_IMG = /rss-pixel|\/pixel[._?-]|feedburner\.com|gravatar\.com|\/1x1[._-]/i;
+
 // Pick the highest-resolution image RSS offers, from wherever it hides it.
 function extractImage(item) {
   let best = null, bestW = 0;
   const consider = (node) => {
     if (!node) return;
     const url = node['@_url'] || (typeof node === 'string' ? node : null);
-    if (!url || !/^https?:\/\//.test(url)) return;
+    if (!url || !/^https?:\/\//.test(url) || JUNK_IMG.test(url)) return;
     const w = parseInt(node['@_width'] || 0, 10) || 0;
     if (!best || w > bestW) { best = decodeUrl(url); bestW = w; }
   };
@@ -192,9 +209,13 @@ function extractImage(item) {
     const html = raw
       .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&amp;/g, '&');
-    const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
-    if (m) best = decodeUrl(m[1]);
+    // First *real* image — descriptions often lead with a tracking pixel.
+    for (const m of html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)) {
+      if (/^https?:\/\//.test(m[1]) && !JUNK_IMG.test(m[1])) { best = decodeUrl(m[1]); break; }
+    }
   }
+  // Feeds occasionally emit literal "undefined"/relative src values.
+  if (best && !/^https?:\/\//.test(best)) best = null;
   return upgradeImage(best);
 }
 

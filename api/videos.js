@@ -87,6 +87,19 @@ export default async function handler(req, res) {
     .filter((_, i) => embeddable[i].status !== 'fulfilled' || embeddable[i].value)
     .slice(0, 14);
 
+  // RSS thumbnails are hqdefault (480×360); most news clips also publish a
+  // 1280×720 maxresdefault — use it when it exists (YouTube 404s when not).
+  await Promise.all(videos.map(async (v) => {
+    const url = `https://i.ytimg.com/vi/${v.id}/maxresdefault.jpg`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 2500);
+    try {
+      const r = await fetch(url, { method: 'HEAD', signal: ctrl.signal });
+      if (r.ok) v.thumbnail = url;
+    } catch { /* keep the RSS thumbnail */ }
+    finally { clearTimeout(t); }
+  }));
+
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=1800, stale-if-error=86400');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.status(200).json({ updatedAt: new Date().toISOString(), count: videos.length, videos });
