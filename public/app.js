@@ -891,14 +891,11 @@ feedEl.addEventListener('click', async (e) => {
     return;
   }
   if (btn.classList.contains('act-share')) {
-    const url = btn.dataset.link, title = btn.dataset.title;
-    try {
-      if (navigator.share) { await navigator.share({ title, url }); return; }
-      await navigator.clipboard.writeText(url);
-      toast('Link copied');
+    const a = currentArticles.find((x) => x.link === btn.dataset.link) || { link: btn.dataset.link, title: btn.dataset.title };
+    if (await shareArticle(a) === 'copied') {
       btn.classList.add('done');
       setTimeout(() => btn.classList.remove('done'), 1200);
-    } catch { /* user cancelled */ }
+    }
   }
 });
 
@@ -1015,6 +1012,37 @@ function updateReaderNav() {
 const linkOut = (a, site) =>
   `<p class="reader-cont"><a href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">Continue reading at ${esc(site || a.source || 'the source')} <span aria-hidden="true">↗</span></a></p>`;
 
+/* Sharing a story shares a Meridian link (?read=<url>) that reopens it in the
+   reader — so a share brings the reader back to Meridian, not straight to the
+   outlet. The reader always links out to the source, so credit is preserved. */
+function meridianShareUrl(article) {
+  try {
+    const u = new URL('/', location.origin);
+    u.searchParams.set('read', article.link);
+    if (article.title) u.searchParams.set('t', article.title.slice(0, 200)); // headline shows instantly, even if extraction fails
+    return u.toString();
+  } catch { return article.link; }
+}
+async function shareArticle(article) {
+  const url = meridianShareUrl(article);
+  try {
+    if (navigator.share) { await navigator.share({ title: article.title || 'Meridian', url }); return 'shared'; }
+    await navigator.clipboard.writeText(url);
+    toast('Meridian link copied');
+    return 'copied';
+  } catch { return 'cancelled'; }
+}
+
+// Swap the reader hero from its gradient placeholder to a real image once the
+// reader endpoint reports one (used for shared ?read= links with no feed data).
+function swapReaderHero(src, a) {
+  const hero = $('.reader-hero', reader);
+  if (!hero) return;
+  hero.classList.remove('noimg');
+  hero.style.backgroundImage = '';
+  hero.innerHTML = `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" data-fallback="${gradientFor(a.title || a.link)}" />`;
+}
+
 async function showReader(index) {
   const a = readerList[index];
   if (!a) return;
@@ -1026,6 +1054,21 @@ async function showReader(index) {
     const r = await fetch(`/api/read?url=${encodeURIComponent(a.link)}`);
     const d = await r.json();
     if (token !== readToken) return; // moved to another story
+    // Shared links arrive with no feed metadata — backfill the header from the
+    // reader endpoint so a standalone story still renders fully.
+    if (d) {
+      if (!a.title && d.title) {
+        a.title = d.title;
+        const h = $('.reader-title', reader); if (h) h.textContent = d.title;
+      }
+      if (!a.source && d.site) {
+        a.source = d.site;
+        const s = $('.reader-src', reader); if (s) s.textContent = d.site;
+        const openA = $('.reader-open', reader);
+        if (openA && openA.firstChild && openA.firstChild.nodeType === 3) openA.firstChild.textContent = `Read at ${d.site} `;
+      }
+      if (!a.image && d.image) { a.image = d.image; swapReaderHero(d.image, a); }
+    }
     const body = $('#reader-body', reader);
     if (d && d.ok && d.paragraphs && d.paragraphs.length) {
       body.innerHTML = d.paragraphs.map((p) => `<p>${esc(p)}</p>`).join('') + linkOut(a, d.site);
@@ -1038,6 +1081,21 @@ async function showReader(index) {
     const s = $('.reader-status', reader);
     if (s) s.outerHTML = linkOut(a);
   }
+}
+
+// Open the reader for a bare URL (a shared ?read= link) with no feed context.
+// An optional title (carried in the share link) shows instantly while the rest
+// is fetched, and survives even when extraction can't run (e.g. GN redirects).
+function openReaderFromUrl(url, title = '') {
+  if (!/^https?:\/\//i.test(url)) return;
+  readerList = [{ link: url, title: title || '', source: '', image: null, summary: '', publishedAt: null }];
+  readerLastFocus = document.activeElement;
+  if (reader.hidden) {
+    reader.hidden = false;
+    document.documentElement.classList.add('reader-lock');
+  }
+  showReader(0);
+  $('.reader-close', reader)?.focus();
 }
 
 function openReaderFromFeed(idx) {
@@ -1078,15 +1136,7 @@ reader.addEventListener('click', (e) => {
     if (currentCat === 'saved' && !on) { closeReader(); loadNews('saved'); }
     return;
   }
-  if (e.target.closest('.reader-share')) {
-    (async () => {
-      try {
-        if (navigator.share) { await navigator.share({ title: a.title, url: a.link }); return; }
-        await navigator.clipboard.writeText(a.link);
-        toast('Link copied');
-      } catch { /* cancelled */ }
-    })();
-  }
+  if (e.target.closest('.reader-share')) { shareArticle(a); }
 });
 
 // hero image that 404s → its gradient fallback (mirrors the feed's handling)
@@ -1157,6 +1207,14 @@ if (bootTab === 'markets' || bootTab === 'foryou' || bootTab === 'saved') {
     $(bootTab === 'markets' ? '.tab[data-view="markets"]' : `.tab[data-cat="${bootTab}"]`)?.click();
   }, 0);
 }
+
+// Shared story link (?read=<source url>&t=<title>) → open it in the reader.
+// URLSearchParams already decodes, so the values are passed through as-is.
+(() => {
+  const params = new URLSearchParams(location.search);
+  const shared = params.get('read');
+  if (shared) { try { openReaderFromUrl(shared, params.get('t') || ''); } catch { /* malformed link */ } }
+})();
 
 loadNews('top');
 loadHistory();
