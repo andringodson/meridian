@@ -9,7 +9,7 @@
 #   docker run --rm -p 8080:8080 meridian     # → http://localhost:8080
 
 # ---- build: install tools, produce the minified dist/ ----
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 # Install with a clean, reproducible tree (needs the lockfile).
 COPY package.json package-lock.json ./
@@ -18,7 +18,7 @@ COPY . .
 RUN npm run build
 
 # ---- preview: serve the built bundle with zero runtime deps ----
-FROM node:20-alpine AS preview
+FROM node:22-alpine AS preview
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/dist ./dist

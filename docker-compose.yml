@@ -2,6 +2,7 @@
 #
 #   docker compose up preview                     # build + serve on :8080
 #   docker compose run --rm build                 # just emit dist/ to the host
+#   docker compose --profile audit run --rm image-check  # preview-image audit (same as CI)
 #   docker compose --profile audit run --rm lighthouse   # Lighthouse report → ./reports
 #
 # The live site runs on Vercel; this stack exists to build the minified bundle
@@ -19,12 +20,25 @@ services:
   # The anonymous volume shadows node_modules so the container's Linux install
   # never clobbers a host (e.g. Windows/macOS) node_modules.
   build:
-    image: node:20-alpine
+    image: node:22-alpine
     working_dir: /app
     volumes:
       - .:/app
       - /app/node_modules
     command: sh -c "npm ci --no-audit --no-fund && npm run build"
+
+  # One-shot: run the same preview-image resolution audit CI runs, in a
+  # container — no local Node needed. Probes the live deployment by default;
+  # point it elsewhere with, e.g. `--base=http://preview:8080` when you bring
+  # the preview service up alongside it. Zero deps, so a bare node image is
+  # enough. Exits non-zero when a tab falls under the ultra-high-res bar.
+  image-check:
+    profiles: ["audit"]
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./scripts:/app/scripts:ro
+    command: ["node", "scripts/check-images.mjs"]
 
   # Optional: Lighthouse audit of the preview server. Report lands in ./reports.
   # Uses a Chromium-equipped image; run with the "audit" profile so it stays
