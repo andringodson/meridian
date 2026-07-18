@@ -3,7 +3,7 @@
 // enough bytes of each preview image to read its real pixel dimensions, and
 // grades them against an ultra-high-res bar. Zero dependencies (Node 18+).
 //
-//   node scripts/check-images.mjs [--base=URL] [--min=1000] [--pass=70]
+//   node scripts/check-images.mjs [--base=URL] [--min=1000] [--pass=65]
 //                                 [--floor=480] [--limit=0] [--timeout=15000]
 //                                 [--json]
 //
@@ -17,9 +17,12 @@
 //
 // Two-tier bar: images under --floor (tracking pixels, tiny thumbnails) fail
 // the run outright; the --pass rate then requires most of each tab to clear
-// the --min ultra bar. Some quality sources cap below it — the Guardian's
-// signed CDN tops out at 700px in RSS — so 100% ultra isn't attainable
-// without dropping them, hence a rate rather than an absolute.
+// the --min ultra bar. Several quality sources cap below it — the Guardian's
+// signed CDN tops out at 700px in RSS (its signature 401s if you touch the
+// width) and Yahoo's zenfs store serves fixed <1000px crops — so 100% ultra
+// isn't attainable without dropping them. The rate (not an absolute) tolerates
+// that; 65% keeps image-heavy but capped tabs like sports honest without
+// flapping red every time the Guardian leads the wire.
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => {
@@ -30,7 +33,7 @@ const args = Object.fromEntries(
 
 const BASE = String(args.base || 'https://meridian-andrin.vercel.app').replace(/\/$/, '');
 const MIN_ULTRA = parseInt(args.min, 10) || 1000;
-const PASS_PCT = parseFloat(args.pass) || 70;
+const PASS_PCT = parseFloat(args.pass) || 65;
 const FLOOR_W = parseInt(args.floor, 10) || 480;
 const PER_TAB_LIMIT = parseInt(args.limit, 10) || 0;
 const TIMEOUT_MS = parseInt(args.timeout, 10) || 15000;

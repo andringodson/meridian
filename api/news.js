@@ -180,8 +180,16 @@ function upgradeImage(url) {
 const decodeUrl = (u) => String(u).replace(/&amp;|&#0?38;/gi, '&');
 
 // Tracking pixels and other non-pictures that RSS feeds disguise as images
-// (NPR ships a 1×1 rss-pixel as the first <img> of every description).
-const JUNK_IMG = /rss-pixel|\/pixel[._?-]|feedburner\.com|gravatar\.com|\/1x1[._-]/i;
+// (NPR ships a 1×1 rss-pixel as the first <img> of every description; the BBC
+// sport feed leads with an a1.api.bbc.co.uk/hit.xiti analytics beacon).
+const JUNK_IMG = /rss-pixel|\/pixel[._?-]|feedburner\.com|gravatar\.com|\/1x1[._-]|hit\.xiti|a1\.api\.bbc\.co\.uk|\/(?:hit|beacon|track(?:ing)?)[._/?-]/i;
+
+// CDNs that only ever serve sub-ultra widths in RSS: the Guardian's signed
+// resizer caps at 700px (its signature voids if you touch the width — verified
+// 401) and Yahoo's zenfs store hands back fixed <1000px crops that ignore any
+// size param. We keep these quality sources, but let sharper CDNs fill the
+// feed first so a surplus tab isn't crowded out by capped thumbnails.
+const CAPPED_HOST = /i\.guim\.co\.uk|media\.zenfs\.com/i;
 
 // Pick the highest-resolution image RSS offers, from wherever it hides it.
 function extractImage(item) {
@@ -317,7 +325,14 @@ export default async function handler(req, res) {
   // the feed (interleaved across publishers). Imageless wire items are kept
   // solely as emergency fill when a category can't muster enough pictures.
   const LIMIT = 80, FLOOR = 40;
-  const imaged = interleave(articles.filter((a) => a.image), LIMIT);
+  // Front-load stories on sharper CDNs: when a tab has more images than it can
+  // show, the capped-host thumbnails (Guardian 700px, Yahoo zenfs) are the ones
+  // that drop, lifting the tab's high-res ratio. Stable sort keeps newest-first
+  // within each group, and interleave still mixes publishers for variety.
+  const withImage = articles
+    .filter((a) => a.image)
+    .sort((a, b) => (CAPPED_HOST.test(a.image) ? 1 : 0) - (CAPPED_HOST.test(b.image) ? 1 : 0));
+  const imaged = interleave(withImage, LIMIT);
   articles = imaged.length >= FLOOR
     ? imaged
     : [...imaged, ...interleave(articles.filter((a) => !a.image), FLOOR - imaged.length)];
