@@ -108,6 +108,7 @@ const sheetEl = $('#settings-sheet');
 const backdropEl = $('#sheet-backdrop');
 function openSheet() {
   renderTopicChips();
+  syncInstallBtn();
   const s = getSettings();
   sheetEl.querySelectorAll('#set-text button').forEach((b) => b.classList.toggle('on', b.dataset.v === (s.text || 'm')));
   sheetEl.querySelectorAll('#set-default button').forEach((b) => b.classList.toggle('on', b.dataset.v === (s.defaultTab || 'top')));
@@ -200,6 +201,36 @@ $('#set-notify')?.addEventListener('change', async (e) => {
     }
   } catch { /* needs an installed app — foreground alerts still work */ }
   toast(background ? 'Alerts on — Meridian checks in the background' : 'Alerts on while Meridian is open');
+});
+
+/* ---------- app: install from settings + saved-stories export ----------
+   `deferredPrompt` is app.js's captured beforeinstallprompt (shared scope). */
+function syncInstallBtn() {
+  const b = $('#set-install');
+  if (b) b.hidden = !deferredPrompt;
+}
+$('#set-install')?.addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  syncInstallBtn();
+});
+addEventListener('appinstalled', () => { deferredPrompt = null; syncInstallBtn(); });
+
+$('#set-export')?.addEventListener('click', () => {
+  const list = getSaved();
+  if (!list.length) { toast('Nothing saved yet — bookmark some stories first'); return; }
+  const blob = new Blob(
+    [JSON.stringify({ exportedAt: new Date().toISOString(), stories: list }, null, 2)],
+    { type: 'application/json' }
+  );
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `meridian-saved-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast(`Exported ${list.length} ${list.length === 1 ? 'story' : 'stories'}`);
 });
 
 /* ---------- smart search: the topbar search box grows a dropdown with

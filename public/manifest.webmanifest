@@ -12,6 +12,11 @@
     { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
     { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ],
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "params": { "title": "t", "text": "text", "url": "read" }
+  },
   "shortcuts": [
     { "name": "Markets", "url": "/?view=markets", "description": "Live market analysis" },
     { "name": "Saved stories", "url": "/?cat=saved", "description": "Your reading list" }

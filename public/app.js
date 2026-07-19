@@ -1375,9 +1375,12 @@ if (bootTab === 'markets' || bootTab === 'foryou' || bootTab === 'saved') {
 
 // Shared story link (?read=<source url>&t=<title>) → open it in the reader.
 // URLSearchParams already decodes, so the values are passed through as-is.
+// Android's share sheet often puts the URL in `text` rather than `url`, so a
+// story shared *into* Meridian (Web Share Target) is fished out of either.
 (() => {
   const params = new URLSearchParams(location.search);
-  const shared = params.get('read');
+  const shared = params.get('read') ||
+    ((params.get('text') || '').match(/https?:\/\/\S+/) || [])[0] || '';
   if (shared) { try { openReaderFromUrl(shared, params.get('t') || ''); } catch { /* malformed link */ } }
 })();
 

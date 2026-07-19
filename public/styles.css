@@ -854,6 +854,15 @@ html.reader-lock, html.reader-lock body { overflow: hidden; }
 .reader-summary li { font-size: 14px; line-height: 1.6; color: #e6e6e6; margin: 4px 0; }
 .reader-sum:disabled { opacity: .5; cursor: wait; }
 
+/* ---------- settings: app actions ---------- */
+.set-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.set-btn {
+  background: none; border: 1px solid var(--border); color: var(--text-2); cursor: pointer;
+  font-size: 13px; padding: 9px 14px; border-radius: var(--r-sm);
+  transition: color .15s, border-color .15s;
+}
+.set-btn:hover { color: var(--text); border-color: var(--accent); }
+
 /* ---------- trending chips ---------- */
 .trends { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 0 0 14px; }
 .trends[hidden] { display: none; }
