@@ -93,6 +93,61 @@ async function quote(inst) {
   }
 }
 
+/* ---------- fallback quotes ----------
+   Yahoo's chart endpoint is unofficial: it can block cloud IPs, tighten rate
+   limits or change shape without notice. When a quote fails, a keyless
+   secondary source fills in (CoinGecko for crypto, Frankfurter for FX), and as
+   a final resort the last good quote from this warm instance is re-served
+   flagged as delayed — so the ticker never goes blank on an upstream hiccup. */
+const lastGood = new Map(); // symbol → quote from a previous invocation
+
+const COINGECKO_IDS = { 'BTC-USD': 'bitcoin', 'ETH-USD': 'ethereum' };
+async function cryptoFallback(insts) {
+  const need = insts.filter((i) => COINGECKO_IDS[i.s]);
+  if (!need.length) return [];
+  const ids = need.map((i) => COINGECKO_IDS[i.s]).join(',');
+  const r = await fetch(
+    `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
+    { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MeridianBot/0.1)' } }
+  );
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j = await r.json();
+  return need.map((i) => {
+    const d = j[COINGECKO_IDS[i.s]];
+    if (!d || !isFinite(d.usd)) return null;
+    const pct = isFinite(d.usd_24h_change) ? d.usd_24h_change : 0;
+    return {
+      symbol: i.s, label: i.label, kind: i.kind,
+      price: Math.round(d.usd * 100) / 100,
+      prevClose: Math.round((d.usd / (1 + pct / 100)) * 100) / 100,
+      changePct: Math.round(pct * 100) / 100,
+      currency: 'USD', spark: [], delayed: true,
+    };
+  }).filter(Boolean);
+}
+
+async function fxFallback(inst) {
+  const [base, quoteCur] = [inst.s.slice(0, 3), inst.s.slice(3, 6)]; // EURUSD=X
+  const d8 = (d) => d.toISOString().slice(0, 10);
+  const r = await fetch(
+    `https://api.frankfurter.dev/v1/${d8(new Date(Date.now() - 6 * 864e5))}..${d8(new Date())}?base=${base}&symbols=${quoteCur}`
+  );
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j = await r.json();
+  const days = Object.keys(j.rates || {}).sort();
+  if (!days.length) return null;
+  const last = j.rates[days[days.length - 1]][quoteCur];
+  const prev = days.length > 1 ? j.rates[days[days.length - 2]][quoteCur] : last;
+  if (!isFinite(last)) return null;
+  return {
+    symbol: inst.s, label: inst.label, kind: inst.kind,
+    price: Math.round(last * 10000) / 10000,
+    prevClose: Math.round(prev * 10000) / 10000,
+    changePct: prev ? Math.round(((last - prev) / prev) * 10000) / 100 : 0,
+    currency: quoteCur, spark: [], delayed: true,
+  };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
@@ -155,6 +210,30 @@ export default async function handler(req, res) {
   const quotes = results
     .map((r) => (r.status === 'fulfilled' ? r.value : null))
     .filter(Boolean);
+
+  // Backfill anything Yahoo dropped: secondary sources first, then the last
+  // good quote this instance has seen.
+  const got = new Set(quotes.map((q) => q.symbol));
+  const missing = INSTRUMENTS.filter((i) => !got.has(i.s));
+  if (missing.length) {
+    const fills = await Promise.allSettled([
+      cryptoFallback(missing.filter((i) => i.kind === 'crypto')),
+      ...missing.filter((i) => i.kind === 'fx').map((i) => fxFallback(i)),
+    ]);
+    for (const f of fills) {
+      if (f.status !== 'fulfilled' || !f.value) continue;
+      for (const q of [].concat(f.value)) {
+        if (q && !got.has(q.symbol)) { quotes.push(q); got.add(q.symbol); }
+      }
+    }
+    for (const i of missing) {
+      const prev = lastGood.get(i.s);
+      if (!got.has(i.s) && prev) { quotes.push({ ...prev, delayed: true }); got.add(i.s); }
+    }
+  }
+  for (const q of quotes) if (!q.delayed) lastGood.set(q.symbol, q);
+  const order = new Map(INSTRUMENTS.map((i, n) => [i.s, n]));
+  quotes.sort((a, b) => (order.get(a.symbol) ?? 99) - (order.get(b.symbol) ?? 99));
 
   res.setHeader('Cache-Control', 's-maxage=45, stale-while-revalidate=300, stale-if-error=86400');
   res.status(200).json({ updatedAt: new Date().toISOString(), count: quotes.length, quotes });
