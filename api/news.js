@@ -276,6 +276,83 @@ function parseFeed(xml, feedUrl) {
 const keyOf = (a) =>
   a.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 80);
 
+/* ---------- same-story clustering ----------
+   Exact-key dedupe can't see the same event worded differently by different
+   outlets. Titles that share most of their significant words are folded into
+   one article carrying a `coverage` list of the other outlets, so a story on
+   every front page reads as one card with its breadth visible — not five
+   near-identical cards. */
+const STOP = new Set((
+  'the a an of to in on for and with as at by after over from is are be has ' +
+  'have it its his her their new says say said will was were this that not ' +
+  'no but up out how what why who more than into about amid against could would'
+).split(' '));
+function sigTokens(title) {
+  const set = new Set();
+  for (const w of title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)) {
+    if (w.length > 3 && !STOP.has(w)) set.add(w);
+  }
+  return set;
+}
+function clusterStories(list) {
+  const toks = list.map((a) => sigTokens(a.title));
+  const parent = list.map((_, i) => i);
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  // Candidate pairs come from a token index (very common tokens are skipped),
+  // so the pass stays near-linear instead of comparing every title pair.
+  const posts = new Map();
+  toks.forEach((set, i) => {
+    for (const w of set) {
+      let p = posts.get(w);
+      if (!p) posts.set(w, (p = []));
+      if (p.length < 20) p.push(i);
+    }
+  });
+  const tried = new Set();
+  toks.forEach((set, i) => {
+    for (const w of set) {
+      for (const j of posts.get(w)) {
+        if (j >= i) break;
+        const pairKey = j * list.length + i;
+        if (tried.has(pairKey)) continue;
+        tried.add(pairKey);
+        const other = toks[j];
+        let inter = 0;
+        for (const t of set) if (other.has(t)) inter++;
+        if (inter >= 3 && inter >= Math.min(set.size, other.size) * 0.6) {
+          const ri = find(i), rj = find(j);
+          if (ri !== rj) parent[rj] = ri;
+        }
+      }
+    }
+  });
+  const groups = new Map();
+  list.forEach((a, i) => {
+    const r = find(i);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r).push(a);
+  });
+  const out = [];
+  for (const members of groups.values()) {
+    const sorted = [...members].sort(
+      (a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || '')
+    );
+    const rep = sorted.find((m) => m.image) || sorted[0];
+    const covered = new Set([rep.source.toLowerCase()]);
+    const coverage = [];
+    for (const m of sorted) {
+      const s = m.source.toLowerCase();
+      if (m === rep || covered.has(s)) continue;
+      covered.add(s);
+      coverage.push({ source: m.source, link: m.link });
+      if (coverage.length >= 6) break;
+    }
+    if (coverage.length) rep.coverage = coverage;
+    out.push(rep);
+  }
+  return out.sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
+}
+
 export default async function handler(req, res) {
   const category = String(req.query?.category || 'top').toLowerCase();
   const feeds = FEEDS[category] || FEEDS.top;
@@ -299,6 +376,9 @@ export default async function handler(req, res) {
   articles = [...seen.values()].sort(
     (a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || '')
   );
+
+  // Fold same-story items from different outlets into one card + coverage list.
+  articles = clusterStories(articles);
 
   // Round-robin across publishers (newest-first within each, capped) so the
   // feed reads as a mix of voices instead of one source's burst.

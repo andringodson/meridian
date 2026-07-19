@@ -179,6 +179,7 @@ function cardHTML(a, lead, i) {
           </button>
         </span>
       </div>
+      ${a.coverage && a.coverage.length ? `<div class="coverage" title="Other outlets covering this story">Also: ${a.coverage.slice(0, 3).map((c) => esc(c.source)).join(' · ')}${a.coverage.length > 3 ? ` +${a.coverage.length - 3}` : ''}</div>` : ''}
     </div>
   </a>`;
 }
@@ -1005,6 +1006,7 @@ function renderReaderShell(a) {
         <button class="reader-act reader-save${saved ? ' on' : ''}" aria-label="Save story"><svg viewBox="0 0 24 24" width="15" height="15" fill="${saved ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span>${saved ? 'Saved' : 'Save'}</span></button>
         <button class="reader-act reader-share" aria-label="Share story"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.7l6.8-4.4M8.6 13.3l6.8 4.4"/></svg><span>Share</span></button>
       </div>
+      ${a.coverage && a.coverage.length ? `<div class="reader-coverage"><span class="cov-label">Also covering this</span>${a.coverage.map((c) => `<a href="${esc(c.link)}" target="_blank" rel="noopener noreferrer">${esc(c.source)}</a>`).join('')}</div>` : ''}
       <div class="reader-body" id="reader-body">
         ${a.summary ? `<p>${esc(a.summary)}</p>` : ''}
         <p class="reader-status">Opening the full story…</p>
