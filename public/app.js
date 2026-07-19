@@ -249,6 +249,7 @@ function applyNews(data) {
   computeNew(currentArticles);
   applySearch();
   renderCurators(currentArticles);
+  renderTrends(currentArticles);
   const t = new Date(data.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   updatedEl.textContent = data.sources ? `${data.count} stories · ${data.sources} sources · ${t}` : `Updated ${t}`;
 }
@@ -404,6 +405,53 @@ function renderCurators(articles) {
   });
   row.innerHTML = cards.join('');
 }
+
+/* ---------- trending topics: tappable chips mined from the loaded feed ----------
+   Pure client-side keyword frequency over the current headlines — a word (or
+   name) carried by several distinct stories is trending in this section.
+   Tapping a chip filters the feed through the existing search box. */
+const trendsEl = $('#trends');
+const TREND_STOP = new Set((
+  'after amid over under says said could would their there about world report reports ' +
+  'first more than into with from this that what when where which while will have been ' +
+  'were they them some most best here your just like make made takes take year years ' +
+  'week weeks day days today live news latest update updates watch video people still ' +
+  'back down before know need thing things five three four wins loses against between ' +
+  'during without other others another every despite because through these those since'
+).split(' '));
+function renderTrends(articles) {
+  if (!trendsEl) return;
+  const byWord = new Map(); // lowercase → { display, count }
+  for (const a of articles) {
+    const seenHere = new Set();
+    for (const raw of a.title.split(/[^A-Za-z0-9'-]+/)) {
+      const w = raw.replace(/^['-]+|['-]+$/g, '');
+      const lower = w.toLowerCase();
+      if (w.length < 4 || TREND_STOP.has(lower) || /^\d+$/.test(w) || seenHere.has(lower)) continue;
+      seenHere.add(lower);
+      let e = byWord.get(lower);
+      if (!e) byWord.set(lower, (e = { display: w, count: 0 }));
+      e.count++;
+      if (w[0] === w[0].toUpperCase()) e.display = w; // prefer proper-noun casing
+    }
+  }
+  const top = [...byWord.values()]
+    .filter((e) => e.count >= 3)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+  if (top.length < 3) { trendsEl.hidden = true; trendsEl.innerHTML = ''; return; }
+  trendsEl.innerHTML = `<span class="trend-label">Trending</span>` +
+    top.map((e) => `<button class="tchip trend-chip" data-t="${esc(e.display)}">${esc(e.display)}</button>`).join('');
+  trendsEl.hidden = false;
+}
+trendsEl?.addEventListener('click', (e) => {
+  const chip = e.target.closest('.trend-chip');
+  if (!chip) return;
+  const wasOn = chip.classList.contains('on');
+  trendsEl.querySelectorAll('.trend-chip').forEach((c) => c.classList.remove('on'));
+  if (wasOn) { searchInput.value = ''; } else { chip.classList.add('on'); searchInput.value = chip.dataset.t; }
+  applySearch();
+});
 
 /* search filters the loaded category client-side */
 const searchInput = $('#search-input');
