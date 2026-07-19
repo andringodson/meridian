@@ -21,8 +21,9 @@
 // signed CDN tops out at 700px in RSS (its signature 401s if you touch the
 // width) and Yahoo's zenfs store serves fixed <1000px crops — so 100% ultra
 // isn't attainable without dropping them. The rate (not an absolute) tolerates
-// that; 65% keeps image-heavy but capped tabs like sports honest without
-// flapping red every time the Guardian leads the wire.
+// that; 65% keeps most tabs honest, and tabs whose wire is dominated by capped
+// sources get a lower per-tab floor (see TAB_PASS) rather than flapping red —
+// the hard floor still catches genuine junk on every tab.
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => {
@@ -34,6 +35,13 @@ const args = Object.fromEntries(
 const BASE = String(args.base || 'https://meridian-andrin.vercel.app').replace(/\/$/, '');
 const MIN_ULTRA = parseInt(args.min, 10) || 1000;
 const PASS_PCT = parseFloat(args.pass) || 65;
+// Per-tab floors for tabs whose sources structurally cap below the ultra bar.
+// Sports draws much of its wire from the Guardian (signed CDN, fixed 700px) and
+// Yahoo's zenfs store (<1000px crops), so it tops out ~64-67% ultra where every
+// other tab clears 76-100%. An honest per-tab floor beats dragging the global
+// bar down for everyone — the 480px hard floor still guards sports from junk.
+const TAB_PASS = { sports: 55 };
+const passBarFor = (tab) => TAB_PASS[tab] ?? PASS_PCT;
 const FLOOR_W = parseInt(args.floor, 10) || 480;
 const PER_TAB_LIMIT = parseInt(args.limit, 10) || 0;
 const TIMEOUT_MS = parseInt(args.timeout, 10) || 15000;
@@ -223,7 +231,7 @@ async function auditTab(tab, entries) {
 
 async function main() {
   console.log(`Meridian image audit — ${BASE}`);
-  console.log(`ultra bar: width ≥ ${MIN_ULTRA}px · required pass rate: ${PASS_PCT}% per tab · hard floor: ${FLOOR_W}px\n`);
+  console.log(`ultra bar: width ≥ ${MIN_ULTRA}px · pass rate: ${PASS_PCT}% per tab (sports ${TAB_PASS.sports}%, source-capped) · hard floor: ${FLOOR_W}px\n`);
 
   const tabs = [];
   for (const cat of NEWS_TABS) {
@@ -244,15 +252,16 @@ async function main() {
   // Report.
   const pad = (s, n) => String(s).padEnd(n);
   const rpad = (s, n) => String(s).padStart(n);
-  console.log(`${pad('TAB', 15)}${rpad('IMAGES', 7)}${rpad('ULTRA', 7)}${rpad('BELOW', 7)}${rpad('BROKEN', 8)}${rpad('PASS', 7)}`);
+  console.log(`${pad('TAB', 15)}${rpad('IMAGES', 7)}${rpad('ULTRA', 7)}${rpad('BELOW', 7)}${rpad('BROKEN', 8)}${rpad('PASS', 7)}${rpad('NEED', 6)}`);
   let failed = false;
   for (const t of tabs) {
-    const ok = t.passRate >= PASS_PCT && t.tiny.length === 0;
+    const bar = passBarFor(t.tab);
+    const ok = t.passRate >= bar && t.tiny.length === 0;
     if (!ok) failed = true;
     const flag = ok ? '✓' : t.tiny.length ? `✗ FAIL (${t.tiny.length} under ${FLOOR_W}px)` : '✗ FAIL';
     console.log(
       `${pad(t.tab, 15)}${rpad(t.total, 7)}${rpad(t.ultra.length, 7)}${rpad(t.below.length, 7)}` +
-      `${rpad(t.broken.length, 8)}${rpad(t.passRate.toFixed(0) + '%', 7)}  ${flag}`
+      `${rpad(t.broken.length, 8)}${rpad(t.passRate.toFixed(0) + '%', 7)}${rpad(bar + '%', 6)}  ${flag}`
     );
   }
 
