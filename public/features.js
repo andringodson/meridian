@@ -113,6 +113,8 @@ function openSheet() {
   sheetEl.querySelectorAll('#set-default button').forEach((b) => b.classList.toggle('on', b.dataset.v === (s.defaultTab || 'top')));
   $('#set-datasaver').checked = !!s.datasaver;
   $('#set-motion').checked = !!s.motion;
+  const nBox = $('#set-notify');
+  if (nBox) nBox.checked = !!s.notify && 'Notification' in window && Notification.permission === 'granted';
   sheetEl.hidden = false; backdropEl.hidden = false;
 }
 function closeSheet() { sheetEl.hidden = true; backdropEl.hidden = true; }
@@ -163,6 +165,41 @@ $('#set-datasaver')?.addEventListener('change', (e) => {
 });
 $('#set-motion')?.addEventListener('change', (e) => {
   saveSettings({ motion: e.target.checked });
+});
+
+/* ---------- story alerts: notifications + periodic background check ----------
+   Opt-in only. With the app installed (Chrome/Edge), a periodic background
+   sync lets the service worker check the top feed and notify while Meridian is
+   closed; elsewhere the permission still enables the app-icon unread badge. */
+$('#set-notify')?.addEventListener('change', async (e) => {
+  const box = e.target;
+  if (!box.checked) {
+    saveSettings({ notify: false });
+    try { (await navigator.serviceWorker.ready).periodicSync?.unregister('news-check'); } catch { /* fine */ }
+    try { navigator.clearAppBadge?.(); } catch { /* fine */ }
+    return;
+  }
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+    toast('Notifications aren’t supported in this browser');
+    box.checked = false;
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') {
+    toast('Notifications are blocked for this site');
+    box.checked = false;
+    return;
+  }
+  saveSettings({ notify: true });
+  let background = false;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    if ('periodicSync' in reg) {
+      await reg.periodicSync.register('news-check', { minInterval: 60 * 60 * 1000 });
+      background = true;
+    }
+  } catch { /* needs an installed app — foreground alerts still work */ }
+  toast(background ? 'Alerts on — Meridian checks in the background' : 'Alerts on while Meridian is open');
 });
 
 /* ---------- smart search: the topbar search box grows a dropdown with

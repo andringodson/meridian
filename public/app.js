@@ -58,8 +58,16 @@ function persistSeen() {
 function addSeen(links) { for (const l of links) if (l) seenSet.add(l); persistSeen(); }
 
 const tabNew = new Map(); // category → unseen count, mirrored onto the tab
+// Installed-app icon badge mirrors the total unread count (Badging API).
+function syncAppBadge() {
+  if (!('setAppBadge' in navigator)) return;
+  let total = 0;
+  for (const n of tabNew.values()) total += n;
+  (total > 0 ? navigator.setAppBadge(total) : navigator.clearAppBadge()).catch(() => {});
+}
 function setTabNew(cat, n) {
   tabNew.set(cat, n);
+  syncAppBadge();
   const tab = document.querySelector(`.tab[data-cat="${cat}"]`);
   if (!tab) return;
   let b = tab.querySelector('.tab-new');
