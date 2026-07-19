@@ -996,6 +996,7 @@ let readerList = [];       // snapshot of the feed at open time — stable under
 let readerIndex = -1;
 let readToken = 0;         // cancels a slow /api/read when the reader moves on
 let readerLastFocus = null;
+let readerParas = [];      // extracted paragraphs of the open story — feeds the AI summary
 const readerOpen = () => !reader.hidden;
 
 function renderReaderShell(a) {
@@ -1013,6 +1014,7 @@ function renderReaderShell(a) {
           <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M8 7h9v9"/></svg></a>
         <button class="reader-act reader-save${saved ? ' on' : ''}" aria-label="Save story"><svg viewBox="0 0 24 24" width="15" height="15" fill="${saved ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span>${saved ? 'Saved' : 'Save'}</span></button>
         <button class="reader-act reader-share" aria-label="Share story"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.7l6.8-4.4M8.6 13.3l6.8 4.4"/></svg><span>Share</span></button>
+        <button class="reader-act reader-sum" hidden aria-label="Summarize story with on-device AI"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z"/><circle cx="19" cy="4.5" r="1.4"/></svg><span>Summarize</span></button>
       </div>
       ${a.coverage && a.coverage.length ? `<div class="reader-coverage"><span class="cov-label">Also covering this</span>${a.coverage.map((c) => `<a href="${esc(c.link)}" target="_blank" rel="noopener noreferrer">${esc(c.source)}</a>`).join('')}</div>` : ''}
       <div class="reader-body" id="reader-body">
@@ -1021,6 +1023,47 @@ function renderReaderShell(a) {
       </div>
     </div>`;
   readerScroll.scrollTop = 0;
+  readerParas = [];
+}
+
+/* ---------- on-device AI summary (Chrome built-in Summarizer / Gemini Nano) ----------
+   Free, keyless, and private: the summary is generated on the user's machine.
+   Progressive enhancement only — the button never appears without the API. */
+let aiSummarizer = null;
+async function summarizeStory(btn) {
+  const body = $('#reader-body', reader);
+  const span = btn.querySelector('span');
+  if (!body || !readerParas.length || !('Summarizer' in self)) return;
+  const existing = $('.reader-summary', reader);
+  if (existing) { existing.remove(); btn.classList.remove('on'); span.textContent = 'Summarize'; return; }
+  btn.disabled = true;
+  span.textContent = 'Summarizing…';
+  const token = readToken;
+  try {
+    const avail = await Summarizer.availability();
+    if (avail === 'unavailable') { toast('On-device AI isn’t available in this browser'); return; }
+    if (avail !== 'available' && !aiSummarizer) toast('Preparing on-device AI — a one-time download');
+    aiSummarizer = aiSummarizer ||
+      await Summarizer.create({ type: 'key-points', format: 'plain-text', length: 'short' });
+    const out = await aiSummarizer.summarize(readerParas.join('\n\n').slice(0, 12000), {
+      context: 'This is a news article.',
+    });
+    if (token !== readToken || !out) return;
+    const points = out.split(/\n+/).map((s) => s.replace(/^[-*•]\s*/, '').trim()).filter(Boolean).slice(0, 5);
+    if (!points.length) return;
+    const div = document.createElement('div');
+    div.className = 'reader-summary';
+    div.innerHTML = `<div class="sum-head">Key points <span class="sum-tag">on-device AI</span></div>
+      <ul>${points.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`;
+    body.before(div);
+    btn.classList.add('on');
+    span.textContent = 'Hide summary';
+  } catch {
+    toast('Couldn’t summarize this story');
+  } finally {
+    btn.disabled = false;
+    if (span.textContent === 'Summarizing…') span.textContent = 'Summarize';
+  }
 }
 
 function updateReaderNav() {
@@ -1091,6 +1134,9 @@ async function showReader(index) {
     const body = $('#reader-body', reader);
     if (d && d.ok && d.paragraphs && d.paragraphs.length) {
       body.innerHTML = d.paragraphs.map((p) => `<p>${esc(p)}</p>`).join('') + linkOut(a, d.site);
+      readerParas = d.paragraphs;
+      // Chrome's built-in Summarizer (Gemini Nano) — offered only where it exists.
+      if ('Summarizer' in self) { const b = $('.reader-sum', reader); if (b) b.hidden = false; }
     } else {
       const s = $('.reader-status', body);
       if (s) s.outerHTML = linkOut(a);
@@ -1139,6 +1185,8 @@ reader.addEventListener('click', (e) => {
   if (e.target.closest('[data-rclose]')) { closeReader(); return; }
   if (e.target.closest('.reader-prev')) { if (readerIndex > 0) showReader(readerIndex - 1); return; }
   if (e.target.closest('.reader-next')) { if (readerIndex < readerList.length - 1) showReader(readerIndex + 1); return; }
+  const sum = e.target.closest('.reader-sum');
+  if (sum) { summarizeStory(sum); return; }
   const a = readerList[readerIndex];
   if (!a) return;
   const save = e.target.closest('.reader-save');

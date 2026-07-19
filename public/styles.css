@@ -835,3 +835,21 @@ html.reader-lock, html.reader-lock body { overflow: hidden; }
   border-radius: 999px; padding: 4px 11px; transition: color .15s, border-color .15s;
 }
 .reader-coverage a:hover { color: var(--text); border-color: var(--accent); }
+
+/* ---------- on-device AI summary ---------- */
+.reader-summary {
+  border: 1px solid var(--border); border-left: 2px solid var(--accent);
+  border-radius: var(--r-md); padding: 14px 16px; margin: 0 0 18px;
+}
+.reader-summary .sum-head {
+  display: flex; align-items: center; gap: 8px;
+  font: 700 11px var(--display); letter-spacing: .09em; text-transform: uppercase;
+  color: var(--text-2); margin-bottom: 8px;
+}
+.reader-summary .sum-tag {
+  border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px;
+  font-size: 9px; color: var(--text-2); letter-spacing: .06em;
+}
+.reader-summary ul { margin: 0; padding-left: 18px; }
+.reader-summary li { font-size: 14px; line-height: 1.6; color: #e6e6e6; margin: 4px 0; }
+.reader-sum:disabled { opacity: .5; cursor: wait; }
