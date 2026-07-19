@@ -234,6 +234,16 @@ function setLive(ok) {
   $('.live-label', liveEl).textContent = ok ? 'LIVE' : 'OFFLINE';
 }
 
+/* View Transitions: category/view switches get a hardware-accelerated
+   crossfade where the API exists (progressive enhancement — a plain call
+   everywhere else, and never under reduced motion). */
+function withViewTransition(fn) {
+  const reduced = document.documentElement.classList.contains('reduce-motion') ||
+    matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (document.startViewTransition && !reduced) document.startViewTransition(fn);
+  else fn();
+}
+
 function applyNews(data) {
   currentArticles = data.articles || [];
   computeNew(currentArticles);
@@ -292,7 +302,8 @@ async function loadNews(cat, { skeleton = true } = {}) {
         return;
       }
     }
-    applyNews(data);
+    if (skeleton) withViewTransition(() => applyNews(data));
+    else applyNews(data);
     setLive(true);
     hideBoot();
   } catch (e) {
@@ -409,8 +420,10 @@ $('#tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('.tab'); if (!btn) return;
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('is-active', t === btn));
   hidePeek();
-  showMarkets(btn.dataset.view === 'markets');
-  showVideos(btn.dataset.view === 'videos');
+  withViewTransition(() => {
+    showMarkets(btn.dataset.view === 'markets');
+    showVideos(btn.dataset.view === 'videos');
+  });
   if (btn.dataset.view) return;
   searchInput.value = '';
   loadNews(btn.dataset.cat);
@@ -997,6 +1010,33 @@ let readerIndex = -1;
 let readToken = 0;         // cancels a slow /api/read when the reader moves on
 let readerLastFocus = null;
 let readerParas = [];      // extracted paragraphs of the open story — feeds the AI summary
+
+/* Extraction cache + prefetch: hovering a card (or opening its neighbour in
+   the reader) warms /api/read, so the story is usually already here when it
+   opens. Failures aren't cached — a retry gets a fresh request. */
+const readCache = new Map(); // url → Promise<extraction json>
+function fetchRead(url) {
+  let p = readCache.get(url);
+  if (!p) {
+    p = fetch(`/api/read?url=${encodeURIComponent(url)}`).then((r) => r.json());
+    p.catch(() => readCache.delete(url));
+    readCache.set(url, p);
+    if (readCache.size > 48) readCache.delete(readCache.keys().next().value);
+  }
+  return p;
+}
+if (matchMedia('(hover: hover)').matches) {
+  let prefetchTimer = null;
+  feedEl.addEventListener('mouseover', (e) => {
+    const card = e.target.closest('.card');
+    clearTimeout(prefetchTimer);
+    if (!card || card.classList.contains('skeleton')) return;
+    const idx = [...feedEl.querySelectorAll('.card')].indexOf(card);
+    const a = renderedList[idx];
+    if (!a || readCache.has(a.link)) return;
+    prefetchTimer = setTimeout(() => { fetchRead(a.link).catch(() => {}); }, 150);
+  });
+}
 const readerOpen = () => !reader.hidden;
 
 function renderReaderShell(a) {
@@ -1112,9 +1152,11 @@ async function showReader(index) {
   const token = ++readToken;
   updateReaderNav();
   renderReaderShell(a);
+  // warm the next story while this one is read
+  const upNext = readerList[index + 1];
+  if (upNext) fetchRead(upNext.link).catch(() => {});
   try {
-    const r = await fetch(`/api/read?url=${encodeURIComponent(a.link)}`);
-    const d = await r.json();
+    const d = await fetchRead(a.link);
     if (token !== readToken) return; // moved to another story
     // Shared links arrive with no feed metadata — backfill the header from the
     // reader endpoint so a standalone story still renders fully.
