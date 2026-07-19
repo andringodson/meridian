@@ -196,11 +196,20 @@ feedEl.addEventListener('error', (e) => {
   const img = e.target;
   if (!(img instanceof HTMLImageElement)) return;
   const wrap = img.parentElement;
-  if (wrap?.classList.contains('thumb')) {
-    wrap.classList.add('noimg');
-    wrap.style.backgroundImage = img.dataset.fallback || '';
-    img.closest('.card')?.classList.remove('has-img');
+  if (!wrap?.classList.contains('thumb')) { img.remove(); return; }
+  // One retry before giving up: news CDNs (NPR's on-demand resizer especially)
+  // 504 on a cold render, then serve fine once it's cached. Re-request the same
+  // URL after a beat — reusing the identical URL keeps signed CDNs (Guardian)
+  // intact — and only fall back to the gradient if it fails a second time.
+  if (!img.dataset.retried) {
+    img.dataset.retried = '1';
+    const src = img.src;
+    setTimeout(() => { if (img.isConnected) img.src = src; }, 1500);
+    return;
   }
+  wrap.classList.add('noimg');
+  wrap.style.backgroundImage = img.dataset.fallback || '';
+  img.closest('.card')?.classList.remove('has-img');
   img.remove();
 }, true);
 
@@ -1139,12 +1148,20 @@ reader.addEventListener('click', (e) => {
   if (e.target.closest('.reader-share')) { shareArticle(a); }
 });
 
-// hero image that 404s → its gradient fallback (mirrors the feed's handling)
+// hero image that 404s → its gradient fallback (mirrors the feed's handling,
+// including the single cold-CDN retry before falling back)
 reader.addEventListener('error', (e) => {
   const img = e.target;
   if (!(img instanceof HTMLImageElement)) return;
   const wrap = img.closest('.reader-hero');
-  if (wrap) { wrap.classList.add('noimg'); wrap.style.backgroundImage = img.dataset.fallback || ''; img.remove(); }
+  if (!wrap) return;
+  if (!img.dataset.retried) {
+    img.dataset.retried = '1';
+    const src = img.src;
+    setTimeout(() => { if (img.isConnected) img.src = src; }, 1500);
+    return;
+  }
+  wrap.classList.add('noimg'); wrap.style.backgroundImage = img.dataset.fallback || ''; img.remove();
 }, true);
 
 // Reader keys: Esc closes, ←/↑/k previous, →/↓/j next. Capture phase + swallow
