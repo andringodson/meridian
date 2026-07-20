@@ -40,6 +40,9 @@ are the next strands, built on the same foundation.
 - **Real-time aggregation** — multiple free RSS sources per category (Google
   News topics plus curated publishers), normalized and de-duplicated on the
   server so you see each story once, from its original outlet.
+- **Search across all the news** — the search box filters what's loaded as you
+  type, and Enter escalates to a real full-text search over every source, with
+  the same same-story clustering as the feed. No index, no key.
 - **Self-updating** — the client refreshes on a timer and on refocus; the API is
   cached at the edge with `stale-while-revalidate`, so responses are instant and
   refreshed in the background. Meridian stays current with zero interaction.
@@ -74,6 +77,7 @@ CORS and keys); the serverless functions fetch, parse, normalize, and cache.
 meridian/
 ├── api/
 │   ├── news.js       # Aggregate + normalize free RSS feeds → JSON (edge-cached)
+│   ├── search.js     # Full-text search over all the news (Google News search feed)
 │   └── wiki.js       # Wikipedia "On this day" events
 ├── public/
 │   ├── index.html    # App shell
@@ -94,6 +98,7 @@ meridian/
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/news?category=<cat>` | Aggregated, de-duplicated headlines. Categories: `top`, `world`, `business`, `technology`, `science`, `health`, `sports`, `entertainment`. |
+| `GET` | `/api/search?q=<query>` | Full-text search across all the news (Google News' keyless search feed), normalized and same-story clustered like the main feed. |
 | `GET` | `/api/wiki` | Notable historical events for the current date. |
 | `GET` | `/api/markets` | World indices, crypto & commodities (delayed quotes). |
 

@@ -11,6 +11,7 @@ const stageTitle = $('#stage-title');
 const liveEl = $('#live');
 
 let currentCat = 'top';
+let currentQuery = '';        // active full-text query when currentCat === 'search'
 let currentArticles = [];
 let renderedList = [];        // exactly what the feed shows now (post-search) — drives the reader
 let currentNew = new Set();   // links considered "new since last visit" in the current view
@@ -267,6 +268,27 @@ async function loadNews(cat, { skeleton = true } = {}) {
     if (!currentArticles.length) feedEl.innerHTML = `<p class="empty">Nothing saved yet — tap the bookmark on any story.</p>`;
     return;
   }
+  if (cat === 'search') {
+    stageTitle.textContent = currentQuery ? `Results for “${currentQuery}”` : 'Search';
+    if (!currentQuery) { feedEl.innerHTML = `<p class="empty">Type a search and press Enter.</p>`; return; }
+    if (skeleton) renderSkeleton();
+    try {
+      const r = await fetch(`/api/search?q=${encodeURIComponent(currentQuery)}`, { cache: 'no-store' });
+      const data = await r.json();
+      lastFetch = Date.now();
+      currentArticles = data.articles || [];
+      currentNew = new Set();      // search results are their own timeline, never flagged "new"
+      renderTrends(currentArticles);
+      renderFeed(currentArticles); // show the full result set — the box now escalates, not filters
+      updatedEl.textContent = data.count
+        ? `${data.count} ${data.count === 1 ? 'result' : 'results'} · ${data.sources || 0} sources`
+        : '';
+      if (!currentArticles.length) feedEl.innerHTML = `<p class="empty">No stories found for “${esc(currentQuery)}”. Try different words.</p>`;
+      setLive(true);
+      hideBoot();
+    } catch { setLive(false); if (!currentArticles.length) feedEl.innerHTML = `<p class="empty">Search is unavailable right now. Retrying…</p>`; }
+    return;
+  }
   if (cat === 'foryou') {
     if (skeleton) renderSkeleton();
     try {
@@ -453,7 +475,10 @@ trendsEl?.addEventListener('click', (e) => {
   applySearch();
 });
 
-/* search filters the loaded category client-side */
+/* Search works in two gears: typing live-filters whatever's loaded (instant),
+   and pressing Enter escalates to a real search across ALL the news — a
+   `search` pseudo-category served by /api/search and kept fresh by the same
+   auto-refresh timer as any other view. */
 const searchInput = $('#search-input');
 function applySearch() {
   const q = searchInput.value.trim().toLowerCase();
@@ -462,6 +487,22 @@ function applySearch() {
   renderFeed(list);
 }
 searchInput.addEventListener('input', applySearch);
+
+function runSearch(q) {
+  q = (q || '').trim();
+  if (q.length < 2) return;
+  currentQuery = q;
+  searchInput.value = q;
+  if (typeof hideSdrop === 'function') hideSdrop();
+  hidePeek();
+  withViewTransition(() => {
+    showMarkets(false);
+    showVideos(false);
+    document.querySelectorAll('.tab').forEach((t) => t.classList.remove('is-active'));
+  });
+  loadNews('search');
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 /* tabs — categories switch the feed; Markets and Videos switch the whole view */
 $('#tabs').addEventListener('click', (e) => {
@@ -476,7 +517,7 @@ $('#tabs').addEventListener('click', (e) => {
   searchInput.value = '';
   loadNews(btn.dataset.cat);
 });
-$('#search').addEventListener('submit', (e) => e.preventDefault());
+$('#search').addEventListener('submit', (e) => { e.preventDefault(); runSearch(searchInput.value); });
 
 /* ---------- tab peek: headline preview on hover ----------
    Hovering a category tab prefetches that category (cached briefly) and shows

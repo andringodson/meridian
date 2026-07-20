@@ -289,9 +289,13 @@ function moveSdrop(d) {
   sdrop.querySelectorAll('.sd-item').forEach((b, i) => b.classList.toggle('active', i === sdropIdx));
 }
 function updateSdrop() {
-  const q = searchInput.value.trim().toLowerCase();
+  const raw = searchInput.value.trim();
+  const q = raw.toLowerCase();
   if (q.length < 2) { hideSdrop(); return; }
-  sdropItems = sectionMatches(q);
+  // Enter alone runs this too (submit handler in app.js) — the row just makes
+  // full-text search discoverable and reachable by arrow keys.
+  const searchAll = sdItem('🔍', `Search all news for “${raw}”`, 'all news', () => runSearch(raw));
+  sdropItems = [searchAll, ...sectionMatches(q)];
   renderSdrop();
   clearTimeout(sdropTicker);
   sdropTicker = setTimeout(async () => {
@@ -304,7 +308,7 @@ function updateSdrop() {
           $('.tab[data-view="markets"]')?.click();
           selectSymbol(m.symbol);
         }));
-      if (ticks.length) { sdropItems = [...sectionMatches(q), ...ticks]; renderSdrop(); }
+      if (ticks.length) { sdropItems = [searchAll, ...sectionMatches(q), ...ticks]; renderSdrop(); }
     } catch { /* offline */ }
   }, 250);
 }
