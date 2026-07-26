@@ -4,6 +4,7 @@
 // then reuses Meridian's own normalize + same-story clustering so a query reads
 // like a curated result set, not a raw RSS dump. Edge-cached per query.
 import { XMLParser } from 'fast-xml-parser';
+import { identify, PUBLISHERS } from './_publishers.js';
 
 const gnSearch = (q) =>
   `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
@@ -67,11 +68,15 @@ function normalize(item) {
   }
   if (/^©/.test(source) || source.length > 40) source = '';
   if (!source) source = hostOf(link);
+  // Same publisher identity as the feed, so a search result opens with the
+  // same byline and provenance as the story would have on the home page.
+  const pub = identify(source, link);
   const published = item.pubDate || item.published || item.updated || '';
   return {
     title,
     link,
-    source: source.trim(),
+    source: pub ? pub.name : '',
+    publisher: pub ? pub.key : null,
     summary: '',
     image: null,
     publishedAt: published ? new Date(published).toISOString() : null,
@@ -82,7 +87,9 @@ function parseFeed(xml) {
   const doc = parser.parse(xml);
   const items = doc?.rss?.channel?.item || doc?.feed?.entry || [];
   const arr = Array.isArray(items) ? items : [items];
-  return arr.map(normalize).filter((a) => a.title && a.link);
+  // Unattributable items (no <source>, no " - Publisher" suffix) are dropped
+  // rather than bylined to the aggregator that listed them.
+  return arr.map(normalize).filter((a) => a.title && a.link && a.source);
 }
 
 const keyOf = (a) =>
@@ -145,13 +152,17 @@ function clusterStories(list) {
       (a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || '')
     );
     const rep = sorted[0];
-    const covered = new Set([rep.source.toLowerCase()]);
+    // Dedupe on the publisher key so one newsroom arriving under two labels is
+    // not counted twice, and never credit an unidentified aggregator entry.
+    const idOf = (m) => m.publisher || m.source.toLowerCase();
+    const covered = new Set([idOf(rep)]);
     const coverage = [];
     for (const m of sorted) {
-      const s = m.source.toLowerCase();
+      if (!m.publisher) continue;
+      const s = idOf(m);
       if (m === rep || covered.has(s)) continue;
       covered.add(s);
-      coverage.push({ source: m.source, link: m.link });
+      coverage.push({ source: m.source, publisher: m.publisher, link: m.link });
       if (coverage.length >= 6) break;
     }
     if (coverage.length) rep.coverage = coverage;
@@ -184,16 +195,30 @@ export default async function handler(req, res) {
     const prev = seen.get(k);
     if (!prev || (a.publishedAt || '') > (prev.publishedAt || '')) seen.set(k, a);
   }
-  const sourceCount = new Set(articles.map((a) => a.source)).size;
   articles = clusterStories([...seen.values()]).slice(0, 60);
+  // Counted after clustering and slicing, so the tally describes the results
+  // actually returned rather than the raw feed they were drawn from.
+  const sourceCount = new Set(
+    articles.flatMap((a) => [a.publisher || a.source, ...(a.coverage || []).map((c) => c.publisher || c.source)])
+      .filter(Boolean)
+  ).size;
 
   // Per-query cache: fresh within 2 min, served stale while revalidating so a
   // repeated query is instant and upstream is queried at most once a window.
   res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600, stale-if-error=86400');
+  // Provenance for the outlets in these results, so a story opened from search
+  // shows the same coverage spread it would from the feed.
+  const present = {};
+  for (const a of articles) {
+    for (const id of [a.publisher, ...(a.coverage || []).map((c) => c.publisher)]) {
+      if (id && PUBLISHERS[id]) present[id] = PUBLISHERS[id];
+    }
+  }
   res.status(200).json({
     query: q,
     count: articles.length,
     sources: sourceCount,
+    publishers: present,
     updatedAt: new Date().toISOString(),
     articles,
   });

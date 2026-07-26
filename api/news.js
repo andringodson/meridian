@@ -3,6 +3,7 @@
 // normalizes and de-duplicates them, and returns JSON. Cached at the CDN edge
 // so the site stays fresh on its own without hammering upstreams.
 import { XMLParser } from 'fast-xml-parser';
+import { identify, PUBLISHERS } from './_publishers.js';
 
 const GN = 'https://news.google.com/rss';
 const gnTopic = (id) =>
@@ -263,11 +264,16 @@ function normalize(item, feedUrl) {
   // Credit lines ("© AFP") or overlong strings are not publisher names.
   if (/^©/.test(source) || source.length > 40) source = '';
   if (!source) source = hostOf(link) || hostOf(feedUrl);
+  // One outlet, one identity: a direct feed calls it "nytimes.com" and Google
+  // News calls it "The New York Times". Counting those separately would credit
+  // the same newsroom twice in a cluster and inflate the source tally.
+  const pub = identify(source, link);
   const published = item.pubDate || item.published || item.updated || '';
   return {
     title,
     link,
-    source: source.trim(),
+    source: pub ? pub.name : '',
+    publisher: pub ? pub.key : null,
     summary: stripHtml(item.description?.['#text'] ?? item.description ?? '').slice(0, 240),
     image: extractImage(item),
     publishedAt: published ? new Date(published).toISOString() : null,
@@ -282,7 +288,10 @@ function parseFeed(xml, feedUrl) {
     doc?.['rdf:RDF']?.item || // RDF (DW)
     [];
   const arr = Array.isArray(items) ? items : [items];
-  return arr.map((it) => normalize(it, feedUrl)).filter((a) => a.title && a.link);
+  // An item with no identifiable publisher is unattributable — Google News
+  // occasionally emits one with neither a <source> nor a " - Publisher" title
+  // suffix. Crediting the aggregator for it would be wrong, so it is dropped.
+  return arr.map((it) => normalize(it, feedUrl)).filter((a) => a.title && a.link && a.source);
 }
 
 const keyOf = (a) =>
@@ -350,13 +359,20 @@ function clusterStories(list) {
       (a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || '')
     );
     const rep = sorted.find((m) => m.image) || sorted[0];
-    const covered = new Set([rep.source.toLowerCase()]);
+    // Dedupe on the publisher key, not the label — otherwise the same newsroom
+    // arriving under two names is listed as two outlets covering the story.
+    const idOf = (m) => m.publisher || m.source.toLowerCase();
+    const covered = new Set([idOf(rep)]);
     const coverage = [];
     for (const m of sorted) {
-      const s = m.source.toLowerCase();
+      const s = idOf(m);
+      // Only creditable newsrooms. An item Google News never labelled resolves
+      // to the aggregator itself, and listing that as an outlet covering the
+      // story credits a directory for someone else's reporting.
+      if (!m.publisher) continue;
       if (m === rep || covered.has(s)) continue;
       covered.add(s);
-      coverage.push({ source: m.source, link: m.link });
+      coverage.push({ source: m.source, publisher: m.publisher || null, link: m.link });
       if (coverage.length >= 6) break;
     }
     if (coverage.length) rep.coverage = coverage;
@@ -384,7 +400,6 @@ export default async function handler(req, res) {
     const prev = seen.get(k);
     if (!prev || (a.publishedAt || '') > (prev.publishedAt || '')) seen.set(k, a);
   }
-  const sourceCount = new Set(articles.map((a) => a.source)).size;
   articles = [...seen.values()].sort(
     (a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || '')
   );
@@ -429,6 +444,20 @@ export default async function handler(req, res) {
     ? imaged
     : [...imaged, ...interleave(articles.filter((a) => !a.image), FLOOR - imaged.length)];
 
+  // Count what the reader is actually being shown. This used to be measured on
+  // the pre-filter pool, so the UI claimed ~42 sources for a feed that shipped
+  // eight — every outlet named here appears on screen.
+  const present = new Map();
+  for (const a of articles) {
+    for (const id of [a.publisher, ...(a.coverage || []).map((c) => c.publisher)]) {
+      if (id && PUBLISHERS[id] && !present.has(id)) present.set(id, PUBLISHERS[id]);
+    }
+  }
+  const sourceCount = new Set(
+    articles.flatMap((a) => [a.publisher, ...(a.coverage || []).map((c) => c.publisher)])
+      .filter(Boolean)
+  ).size;
+
   // Edge-cache: fresh within 60s, serve slightly stale while revalidating.
   res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=600, stale-if-error=86400');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -436,6 +465,8 @@ export default async function handler(req, res) {
     category,
     count: articles.length,
     sources: sourceCount,
+    // Provenance for every outlet on screen, sent once rather than per article.
+    publishers: Object.fromEntries(present),
     updatedAt: new Date().toISOString(),
     articles,
   });

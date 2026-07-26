@@ -907,18 +907,57 @@ html.morphing .reader-panel, html.morphing .reader-backdrop { animation: none; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .card.lead .coverage { font-size: 12px; }
+/* ---------- coverage spread ----------
+   How many newsrooms carried this, where they sit and who funds them. */
 .reader-coverage {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid var(--border);
 }
-.reader-coverage .cov-label {
+.cov-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 9px; margin-bottom: 11px; }
+.cov-label {
   font: 700 10px var(--display); letter-spacing: .09em; text-transform: uppercase; color: var(--text-2);
 }
-.reader-coverage a {
+.cov-sum { font-size: 12px; color: var(--text-2); }
+.cov-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.cov-chip {
+  display: inline-flex; align-items: center; gap: 7px;
   font-size: 12px; color: var(--text-2); border: 1px solid var(--border);
-  border-radius: 999px; padding: 4px 11px; transition: color .15s, border-color .15s;
+  border-radius: 999px; padding: 4px 10px 4px 11px;
+  transition: color .15s, border-color .15s;
 }
-.reader-coverage a:hover { color: var(--text); border-color: var(--accent); }
+.cov-chip:hover { color: var(--text); border-color: var(--accent); }
+.cov-chip.is-lead { color: var(--text); border-color: var(--border-2); }
+/* A hairline of colour for how a newsroom is funded — the tooltip spells it
+   out, so colour is never the only carrier of the meaning. */
+.cov-chip::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: #555; flex: none;
+}
+.cov-chip.own-public::before { background: #4dd0e1; }
+.cov-chip.own-nonprofit::before { background: #35d07f; }
+.cov-chip.own-private::before { background: #7a7a7a; }
+.cov-chip.own-government::before { background: #f0abfc; }
+.cov-cc {
+  font: 600 9.5px var(--display); letter-spacing: .06em;
+  color: var(--text-2); border: 1px solid var(--border); border-radius: 3px;
+  padding: 1px 4px;
+}
+
+/* ---------- related reading (semantic neighbours) ---------- */
+.reader-related { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--border); }
+.reader-related ul { list-style: none; margin: 11px 0 0; padding: 0; }
+.reader-related li + li { margin-top: 2px; }
+.reader-related a {
+  display: flex; align-items: baseline; gap: 10px; justify-content: space-between;
+  padding: 9px 0; border-bottom: 1px solid #131313;
+  transition: color .15s;
+}
+.reader-related li:last-child a { border-bottom: 0; }
+.rel-title { font-size: 14px; line-height: 1.4; color: var(--text); text-wrap: pretty; }
+.reader-related a:hover .rel-title { color: var(--accent-hi); }
+.rel-src {
+  flex: none; font: 600 10px var(--display); letter-spacing: .05em;
+  text-transform: uppercase; color: var(--text-2);
+}
 
 /* ---------- on-device AI summary ---------- */
 .reader-summary {

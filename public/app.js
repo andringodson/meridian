@@ -130,6 +130,40 @@ function timeAgo(iso) {
 }
 const esc = (s = '') => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+/* ---------- publisher provenance ----------
+   Who owns and funds the newsrooms on screen, keyed by publisher id and filled
+   from each /api/news response. Country and funding are matters of record; the
+   deliberate omission is a left/right rating, which is contested and would mean
+   shipping someone else's politics as if it were data. */
+const publisherMeta = {};
+const OWNERSHIP_TEXT = {
+  public: 'publicly funded',
+  nonprofit: 'non-profit',
+  private: 'commercial',
+  government: 'government body',
+};
+const COUNTRY_TEXT = {
+  US: 'United States', GB: 'United Kingdom', FR: 'France',
+  DE: 'Germany', QA: 'Qatar', CA: 'Canada',
+};
+const pubOf = (o) => (o && o.publisher && publisherMeta[o.publisher]) || null;
+
+/* Everyone carrying a story, the lead outlet included, in one list. */
+function coverageSpread(a) {
+  if (!a) return null;
+  const outlets = [{ source: a.source, publisher: a.publisher, link: a.link, lead: true },
+    ...(a.coverage || [])];
+  if (outlets.length < 2) return null;
+  const countries = new Set(), funding = new Map();
+  for (const o of outlets) {
+    const p = pubOf(o);
+    if (!p) continue;
+    if (p.country) countries.add(p.country);
+    if (p.ownership) funding.set(p.ownership, (funding.get(p.ownership) || 0) + 1);
+  }
+  return { outlets, countries: [...countries], funding };
+}
+
 /* ---------- toast notifications ---------- */
 const toastEl = document.createElement('div');
 toastEl.className = 'toast';
@@ -291,6 +325,10 @@ function morph(from, update) {
 
 function applyNews(data) {
   currentArticles = data.articles || [];
+  // Provenance for the outlets on screen, sent once per response rather than
+  // repeated on every article. Merged so a story opened from another tab still
+  // resolves its outlets.
+  if (data.publishers) Object.assign(publisherMeta, data.publishers);
   computeNew(currentArticles);
   applySearch();
   renderCurators(currentArticles);
@@ -1217,6 +1255,66 @@ if (matchMedia('(hover: hover)').matches) {
 }
 const readerOpen = () => !reader.hidden;
 
+/* Who else is carrying this story, and who they answer to. Each outlet shows
+   its home country and how it is funded, so the reader can see at a glance
+   whether a story is carried by one newsroom or by six across three countries —
+   and whether those newsrooms are commercial, public or non-profit. */
+function coverageHTML(a) {
+  const spread = coverageSpread(a);
+  if (!spread) return '';
+  const { outlets, countries, funding } = spread;
+  const bits = [`${outlets.length} outlets`];
+  if (countries.length > 1) bits.push(`${countries.length} countries`);
+  const mix = [...funding.entries()]
+    .sort((x, y) => y[1] - x[1])
+    .map(([k, n]) => `${n} ${OWNERSHIP_TEXT[k] || k}`);
+  const chips = outlets.map((o) => {
+    const p = pubOf(o);
+    const title = p && p.country
+      ? `${p.name} — ${COUNTRY_TEXT[p.country] || p.country}, ${OWNERSHIP_TEXT[p.ownership] || 'funding not recorded'}`
+      : `${o.source} — provenance not recorded`;
+    return `<a class="cov-chip${o.lead ? ' is-lead' : ''}${p && p.ownership ? ` own-${p.ownership}` : ''}"
+      href="${esc(o.link)}" target="_blank" rel="noopener noreferrer" title="${esc(title)}">
+      <span class="cov-name">${esc(p ? p.name : o.source)}</span>
+      ${p && p.country ? `<span class="cov-cc">${esc(p.country)}</span>` : ''}
+    </a>`;
+  }).join('');
+  return `<div class="reader-coverage">
+    <div class="cov-head">
+      <span class="cov-label">Coverage</span>
+      <span class="cov-sum">${esc(bits.join(' · '))}${mix.length ? ` — ${esc(mix.join(', '))}` : ''}</span>
+    </div>
+    <div class="cov-chips">${chips}</div>
+  </div>`;
+}
+
+/* Stories the model puts near this one — suggestions, never a merge.
+   Measured on live feeds, similarity alone cannot tell "same event" from "same
+   subject": two unrelated Russia-Ukraine stories scored 0.727 while a genuine
+   duplicate pair scored 0.720, so no threshold separates them. Folding on that
+   signal would hide real stories. Offered as related reading instead, where a
+   near miss is still a useful suggestion rather than a disappeared article. */
+const RELATED_MIN = 0.45;
+function relatedHTML(a) {
+  if (!semanticOn() || !a || !a.link) return '';
+  const skip = new Set([a.link, ...(a.coverage || []).map((c) => c.link)]);
+  const av = articleVec(a);
+  if (!av) return '';
+  const near = currentArticles
+    .filter((x) => !skip.has(x.link))
+    .map((x) => ({ x, s: Embed.similarity(av, articleVec(x)) }))
+    .filter((r) => r.s >= RELATED_MIN)
+    .sort((p, q) => q.s - p.s)
+    .slice(0, 4);
+  if (!near.length) return '';
+  return `<div class="reader-related">
+    <div class="cov-label">Related reading</div>
+    <ul>${near.map(({ x }) => `<li><a href="${esc(x.link)}" data-related="${esc(x.link)}">
+      <span class="rel-title">${esc(x.title)}</span>
+      <span class="rel-src">${esc(x.source || '')}</span></a></li>`).join('')}</ul>
+  </div>`;
+}
+
 function renderReaderShell(a) {
   const hero = a.image
     ? `<div class="reader-hero"><img src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" data-fallback="${gradientFor(a.title)}" /></div>`
@@ -1234,11 +1332,12 @@ function renderReaderShell(a) {
         <button class="reader-act reader-share" aria-label="Share story"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.7l6.8-4.4M8.6 13.3l6.8 4.4"/></svg><span>Share</span></button>
         <button class="reader-act reader-sum" hidden aria-label="Summarize story with on-device AI"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z"/><circle cx="19" cy="4.5" r="1.4"/></svg><span>Summarize</span></button>
       </div>
-      ${a.coverage && a.coverage.length ? `<div class="reader-coverage"><span class="cov-label">Also covering this</span>${a.coverage.map((c) => `<a href="${esc(c.link)}" target="_blank" rel="noopener noreferrer">${esc(c.source)}</a>`).join('')}</div>` : ''}
+      ${coverageHTML(a)}
       <div class="reader-body" id="reader-body">
         ${a.summary ? `<p>${esc(a.summary)}</p>` : ''}
         <p class="reader-status">Opening the full story…</p>
       </div>
+      ${relatedHTML(a)}
     </div>`;
   readerScroll.scrollTop = 0;
   readerParas = [];
@@ -1446,6 +1545,23 @@ reader.addEventListener('click', (e) => {
   if (e.target.closest('[data-rclose]')) { closeReader(); return; }
   if (e.target.closest('.reader-prev')) { if (readerIndex > 0) showReader(readerIndex - 1); return; }
   if (e.target.closest('.reader-next')) { if (readerIndex < readerList.length - 1) showReader(readerIndex + 1); return; }
+  const rel = e.target.closest('[data-related]');
+  // Modified clicks (⌘/Ctrl/middle) still open the source directly.
+  if (rel && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    const link = rel.dataset.related;
+    let idx = readerList.findIndex((x) => x.link === link);
+    if (idx < 0) {
+      const art = currentArticles.find((x) => x.link === link);
+      if (!art) return;
+      // Append rather than replace so prev/next still walks back to where the
+      // reader started.
+      readerList = [...readerList, art];
+      idx = readerList.length - 1;
+    }
+    showReader(idx);
+    return;
+  }
   const sum = e.target.closest('.reader-sum');
   if (sum) { summarizeStory(sum); return; }
   const a = readerList[readerIndex];
