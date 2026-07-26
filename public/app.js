@@ -1727,6 +1727,24 @@ installBtn.addEventListener('click', async () => {
 });
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  /* A worker keeps control of the page it started on, so a worker that shipped
+     a bug carries on serving the reader even after the fix is deployed — they
+     see the breakage until they happen to open the site again. When a
+     replacement worker takes over (skipWaiting + claim), reload once so it is
+     the one actually serving this page.
+
+     `hadController` is the guard that matters: controllerchange also fires the
+     first time a worker claims a page that had none, and reloading there would
+     be a pointless flash. Only an upgrade — replacing a worker that was already
+     in charge — is worth reloading for, and after that reload there is nothing
+     left to replace, so it cannot loop. */
+  const hadController = !!navigator.serviceWorker.controller;
+  let swReloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || swReloading) return;
+    swReloading = true;
+    location.reload();
+  });
 }
 
 /* manual refresh */
