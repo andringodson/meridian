@@ -1,7 +1,7 @@
 /* Meridian service worker — app-shell offline support.
    Shell: network-first (deploys apply on next load), cache fallback offline.
    Live API: network-first. */
-const SHELL = 'meridian-shell-v21';
+const SHELL = 'meridian-shell-v22';
 const STATE = 'meridian-state'; // tiny key-value store; survives shell upgrades
 // The opt-in semantic model is 7.5MB the reader chose to download. It lives in
 // its own cache (written by embed.js) and must outlive shell upgrades, or every
@@ -29,13 +29,20 @@ self.addEventListener('fetch', (e) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
 
-  // Cross-origin (article images, outbound links) is left alone while there is
-  // a network. Offline, fall back to the cache so a saved story still opens
-  // with its picture instead of a placeholder — nothing is ever cached here,
-  // only replayed from what the reading queue already stored.
+  // Cross-origin (article images, outbound links) must be left to the browser
+  // whenever there is a network.
+  //
+  // This worker is served with the site's CSP, and `connect-src` there is
+  // 'self'. A fetch() from inside the worker counts as a connect, so proxying
+  // an article thumbnail through here gets it blocked outright — while the very
+  // same URL loads fine straight from an <img>, which answers to `img-src
+  // https:` instead. Doing that broke ~85% of preview images in production.
+  //
+  // Offline is the one case worth intercepting, and there the answer comes from
+  // the reading queue's cache rather than the network, so no connect happens.
   if (url.origin !== self.location.origin) {
-    if (request.destination === 'image') {
-      e.respondWith(fetch(request).catch(() => caches.match(request)));
+    if (request.destination === 'image' && self.navigator && self.navigator.onLine === false) {
+      e.respondWith(caches.match(request).then((hit) => hit || fetch(request)));
     }
     return;
   }
