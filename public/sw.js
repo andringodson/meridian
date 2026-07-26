@@ -1,13 +1,16 @@
 /* Meridian service worker — app-shell offline support.
    Shell: network-first (deploys apply on next load), cache fallback offline.
    Live API: network-first. */
-const SHELL = 'meridian-shell-v20';
+const SHELL = 'meridian-shell-v21';
 const STATE = 'meridian-state'; // tiny key-value store; survives shell upgrades
 // The opt-in semantic model is 7.5MB the reader chose to download. It lives in
 // its own cache (written by embed.js) and must outlive shell upgrades, or every
 // deploy would silently bill them for it again.
 const MODEL = 'meridian-model-v1';
-const KEEP = [SHELL, STATE, MODEL];
+// Saved stories keep their extracted text and hero image here so the reading
+// queue survives a lost connection — and a deploy.
+const READING = 'meridian-reading-v1';
+const KEEP = [SHELL, STATE, MODEL, READING];
 const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/fluid.js', '/features.js', '/embed.js', '/fonts/space-grotesk-latin.woff2', '/logo.svg', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', (e) => {
@@ -26,8 +29,16 @@ self.addEventListener('fetch', (e) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
 
-  // Only manage our own origin; let cross-origin (fonts, article links) pass through.
-  if (url.origin !== self.location.origin) return;
+  // Cross-origin (article images, outbound links) is left alone while there is
+  // a network. Offline, fall back to the cache so a saved story still opens
+  // with its picture instead of a placeholder — nothing is ever cached here,
+  // only replayed from what the reading queue already stored.
+  if (url.origin !== self.location.origin) {
+    if (request.destination === 'image') {
+      e.respondWith(fetch(request).catch(() => caches.match(request)));
+    }
+    return;
+  }
 
   // Live data: network-first, no long-term caching.
   if (url.pathname.startsWith('/api/')) {

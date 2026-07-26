@@ -25,6 +25,10 @@ const CAT_LABEL = {
   foryou: 'For You',
 };
 
+// Run work when the browser is free. Declared up here because the offline
+// reading queue below uses it, and loadNews can fire during boot.
+const onIdle = (fn, timeout) => ('requestIdleCallback' in window ? requestIdleCallback(fn, { timeout }) : setTimeout(fn, timeout));
+
 /* ---------- saved stories (localStorage, keyed by link) ---------- */
 const SAVE_KEY = 'meridian-saved';
 function getSaved() {
@@ -33,9 +37,88 @@ function getSaved() {
 function isSaved(link) { return getSaved().some((a) => a.link === link); }
 function toggleSave(article) {
   let list = getSaved();
-  if (list.some((a) => a.link === article.link)) list = list.filter((a) => a.link !== article.link);
+  const had = list.some((a) => a.link === article.link);
+  if (had) list = list.filter((a) => a.link !== article.link);
   else list = [article, ...list].slice(0, 100);
   localStorage.setItem(SAVE_KEY, JSON.stringify(list));
+  // Saving is a promise that the story will still be there later, including on
+  // a plane. Stow the text now, while there is a connection to stow it with.
+  if (had) dropOffline(article); else stashOffline(article);
+}
+
+/* ---------- offline reading queue ----------
+   Saved stories keep their extracted text (and hero image) in a cache of their
+   own, so the reader opens them with no network at all. The service worker
+   falls back to `caches.match(request)` for any request it cannot fetch, and
+   that searches every cache — so storing the response under its own URL is all
+   it takes for the offline path to find it. The cache is excluded from the
+   worker's activate sweep, or a deploy would quietly empty the queue. */
+const OFFLINE_CACHE = 'meridian-reading-v1';
+const readUrlFor = (link) => `/api/read?url=${encodeURIComponent(link)}`;
+
+async function stashOffline(article) {
+  if (!article?.link || !('caches' in window)) return false;
+  try {
+    const store = await caches.open(OFFLINE_CACHE);
+    const url = readUrlFor(article.link);
+    if (!(await store.match(url))) await store.add(url);
+    // The hero too, so a saved story doesn't open as a bare gradient offline.
+    // It has to be fetched and put by hand: a cross-origin image comes back
+    // opaque (status 0) and Cache.add() rejects anything that isn't a 2xx,
+    // while Cache.put() stores an opaque response happily. It only ever needs
+    // replaying, never reading, so opaque is fine.
+    if (article.image) {
+      try {
+        const img = await fetch(article.image, { mode: 'no-cors', credentials: 'omit' });
+        await store.put(article.image, img);
+      } catch { /* CDN refused or offline — the gradient fallback covers it */ }
+    }
+    return true;
+  } catch { return false; }
+}
+
+async function dropOffline(article) {
+  if (!article?.link || !('caches' in window)) return;
+  try {
+    const store = await caches.open(OFFLINE_CACHE);
+    await store.delete(readUrlFor(article.link));
+    if (article.image) await store.delete(article.image);
+  } catch { /* nothing stored */ }
+}
+
+// How many saved stories are actually readable offline right now.
+async function offlineReady() {
+  if (!('caches' in window)) return 0;
+  try {
+    const store = await caches.open(OFFLINE_CACHE);
+    const saved = getSaved();
+    const hits = await Promise.all(saved.map((a) => store.match(readUrlFor(a.link))));
+    return hits.filter(Boolean).length;
+  } catch { return 0; }
+}
+
+/* Anything saved before this existed — or saved while offline — is filled in
+   the next time the Saved tab is opened, one at a time when the browser is
+   idle so it never competes with the feed. */
+let backfilling = false;
+// Returns how many stories it newly stowed. Callers use that to decide whether
+// a re-render is warranted — re-rendering unconditionally would re-trigger the
+// backfill and loop forever.
+async function backfillOffline() {
+  if (backfilling || !navigator.onLine || !('caches' in window)) return 0;
+  backfilling = true;
+  let added = 0;
+  try {
+    const store = await caches.open(OFFLINE_CACHE);
+    for (const a of getSaved()) {
+      if (document.hidden) break;
+      if (await store.match(readUrlFor(a.link))) continue;
+      if (await stashOffline(a)) added++;
+      await new Promise((r) => setTimeout(r, 400)); // stay polite to the API
+    }
+  } catch { /* quota or offline — try again next visit */ }
+  backfilling = false;
+  return added;
 }
 
 /* ---------- "new since last visit" (localStorage, keyed by link) ----------
@@ -346,8 +429,21 @@ async function loadNews(cat, { skeleton = true } = {}) {
     currentNew = new Set(); // saved stories are yours already — never flagged "new"
     lastFetch = Date.now();
     applySearch();
-    updatedEl.textContent = `${currentArticles.length} saved on this device`;
-    if (!currentArticles.length) feedEl.innerHTML = `<p class="empty">Nothing saved yet — tap the bookmark on any story.</p>`;
+    const n = currentArticles.length;
+    updatedEl.textContent = `${n} saved on this device`;
+    if (!n) feedEl.innerHTML = `<p class="empty">Nothing saved yet — tap the bookmark on any story.</p>`;
+    // Report how much of the queue survives a lost connection, then top it up.
+    offlineReady().then((ready) => {
+      if (currentCat !== 'saved') return;
+      updatedEl.textContent = ready === n && n
+        ? `${n} saved · all readable offline`
+        : `${n} saved · ${ready} readable offline`;
+    });
+    onIdle(() => backfillOffline().then((added) => {
+      // Only re-render when the queue actually grew, or this would re-enter
+      // itself forever.
+      if (added && currentCat === 'saved') loadNews('saved', { skeleton: false });
+    }), 2000);
     return;
   }
   if (cat === 'search') {
@@ -1675,7 +1771,6 @@ loadNews('top');
 loadHistory();
 loadMarkets();
 // Background timers idle out when the tab isn't visible — no wasted requests.
-const onIdle = (fn, timeout) => ('requestIdleCallback' in window ? requestIdleCallback(fn, { timeout }) : setTimeout(fn, timeout));
 setInterval(() => { if (!document.hidden) loadMarkets(); }, 60_000);
 setInterval(() => { if (!document.hidden && reelLoaded) loadVideos(); }, 600_000);
 onIdle(sweepNew, 2500);              // seed / populate per-tab "new" counts, off the critical path
