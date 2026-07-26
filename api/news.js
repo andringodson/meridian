@@ -184,6 +184,13 @@ const decodeUrl = (u) => String(u).replace(/&amp;|&#0?38;/gi, '&');
 // sport feed leads with an a1.api.bbc.co.uk/hit.xiti analytics beacon).
 const JUNK_IMG = /rss-pixel|\/pixel[._?-]|feedburner\.com|gravatar\.com|\/1x1[._-]|hit\.xiti|a1\.api\.bbc\.co\.uk|\/(?:hit|beacon|track(?:ing)?)[._/?-]/i;
 
+// Not pictures at all. Some feeds (NASA especially) put a video player URL in
+// media:content, which then rendered as a "preview image" that resolves to an
+// HTML page. Animated GIFs are excluded too: the newsroom CDNs that serve them
+// (Future's futurecdn in particular) ignore their own size tokens for GIF and
+// hand back a ~300px loop, so they always land far under the quality floor.
+const NOT_IMAGE = /youtube\.com|youtu\.be|player\.vimeo\.com|dailymotion\.com|\.(?:gif|mp4|m3u8|webm|mov|mp3|pdf)(?:[?#]|$)/i;
+
 // CDNs that only ever serve sub-ultra widths in RSS: the Guardian's signed
 // resizer caps at 700px (its signature voids if you touch the width — verified
 // 401) and Yahoo's zenfs store hands back fixed <1000px crops that ignore any
@@ -197,7 +204,10 @@ function extractImage(item) {
   const consider = (node) => {
     if (!node) return;
     const url = node['@_url'] || (typeof node === 'string' ? node : null);
-    if (!url || !/^https?:\/\//.test(url) || JUNK_IMG.test(url)) return;
+    if (!url || !/^https?:\/\//.test(url) || JUNK_IMG.test(url) || NOT_IMAGE.test(url)) return;
+    // media:content carries its own kind — trust it over guessing from the URL.
+    const kind = String(node['@_medium'] || node['@_type'] || '');
+    if (kind && !/image/i.test(kind)) return;
     const w = parseInt(node['@_width'] || 0, 10) || 0;
     if (!best || w > bestW) { best = decodeUrl(url); bestW = w; }
   };
@@ -219,7 +229,9 @@ function extractImage(item) {
       .replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&amp;/g, '&');
     // First *real* image — descriptions often lead with a tracking pixel.
     for (const m of html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)) {
-      if (/^https?:\/\//.test(m[1]) && !JUNK_IMG.test(m[1])) { best = decodeUrl(m[1]); break; }
+      if (/^https?:\/\//.test(m[1]) && !JUNK_IMG.test(m[1]) && !NOT_IMAGE.test(m[1])) {
+        best = decodeUrl(m[1]); break;
+      }
     }
   }
   // Feeds occasionally emit literal "undefined"/relative src values.

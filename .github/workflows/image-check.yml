@@ -19,9 +19,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
+      # On push, CI has the new script instantly but production is still being
+      # deployed by hand, so the probe would grade the OLD feed code and fail
+      # for no reason. Give the deploy time to land before grading it.
+      - if: github.event_name == 'push'
+        run: sleep 150
       # Zero dependencies — no npm install needed.
       - run: node scripts/check-images.mjs
