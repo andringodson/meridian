@@ -1,10 +1,17 @@
 <div align="center">
 
-<img src="public/logo.svg" alt="Meridian" width="76" height="76" />
+<!-- The app's logo.svg is drawn in currentColor, which an <img> cannot inherit
+     from GitHub's theme — it resolves to black and disappears in dark mode.
+     These two variants are literally coloured and swapped by prefers-color-scheme. -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark.svg" />
+  <source media="(prefers-color-scheme: light)" srcset=".github/assets/logo-light.svg" />
+  <img src=".github/assets/logo-light.svg" alt="Meridian" width="76" height="76" />
+</picture>
 
 # Meridian
 
-**A real-time intelligence surface — world news, history, and markets, assembled from open sources and kept current on its own.**
+**Read the world from one calm surface — news, markets and history, drawn entirely from open sources and kept current on its own.**
 
 [![Live](https://img.shields.io/badge/live-meridian--andrin.vercel.app-0000ee?style=flat-square)](https://meridian-andrin.vercel.app)
 [![PWA](https://img.shields.io/badge/installable-PWA-0000ee?style=flat-square)](https://meridian-andrin.vercel.app)
@@ -17,23 +24,33 @@
 
 ## About
 
-Meridian is a single, calm surface for keeping up with the world. It gathers
-headlines from a spread of reputable public feeds, threads in the day's notable
-history from Wikipedia, and refreshes itself continuously — no sign-in, no API
-keys, no manual reloads. The result reads like a private wire service: fast,
-uncluttered, and always current.
+Meridian is a personal wire service. It draws headlines from a spread of
+established newsrooms, folds the same story told by different outlets into one
+card, threads in the day's history from Wikipedia, and keeps itself current
+without being asked. No account, no API keys, no tracking, no advertising.
 
-It is built to run everywhere from one codebase. On the web it is a website; on
-a phone or a laptop it installs as an app (PWA) with an offline-ready shell. The
-design is deliberately spare — a black canvas, a single electric-blue accent,
-and typography doing the heavy lifting — so the content, not the chrome, holds
-your attention.
+Three commitments shape it:
 
-**Version 1 is news-first.** Live market analytics and a deeper history explorer
-are the next strands, built on the same foundation.
+**Provenance over volume.** Every story shows who is carrying it — how many
+newsrooms, in which countries, and how each is funded: publicly, commercially or
+as a non-profit. Country and funding are matters of public record. Meridian
+deliberately publishes no left/right rating, because those are contested and
+shipping one would mean encoding someone else's politics as if it were data.
 
-> Meridian reads only open, publicly available sources (public RSS and the
-> Wikimedia API). It stores no personal data and requires no account.
+**Intelligence that stays on your device.** Search understands meaning, not just
+matching words — "monetary policy" finds the rate decision. It runs on a 7.5 MB
+open static-embedding model that executes in the browser as a lookup and an
+average, with no neural-network runtime and no WebAssembly. Nothing you read or
+type is transmitted anywhere. It is opt-in, cached for offline use, and can be
+removed in one click.
+
+**Legible by design.** A black canvas, one electric-blue accent, hairline rules
+and typography doing the work. Saved stories keep their text for reading with no
+connection at all.
+
+> Meridian reads only open, publicly available sources — public RSS feeds and
+> the Wikimedia API. It stores no personal data and requires no account. Every
+> story links back to the newsroom that reported it.
 
 ## Highlights
 
