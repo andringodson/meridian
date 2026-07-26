@@ -1,0 +1,14 @@
+{
+  "source": "minishlab/potion-base-8M",
+  "modelType": "model2vec",
+  "tokenizer": "baai/bge-base-en-v1.5",
+  "dims": 256,
+  "vocab": 29528,
+  "lowercase": true,
+  "unkId": 1,
+  "subwordPrefix": "##",
+  "maxCharsPerWord": 100,
+  "normalize": true,
+  "licence": "MIT (minishlab/model2vec)",
+  "builtBy": "scripts/make-embedding-model.mjs"
+}

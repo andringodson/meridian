@@ -43,6 +43,14 @@ are the next strands, built on the same foundation.
 - **Search across all the news** — the search box filters what's loaded as you
   type, and Enter escalates to a real full-text search over every source, with
   the same same-story clustering as the feed. No index, no key.
+- **Semantic search & For You, on your device** — an optional 7.5 MB language
+  model matches stories by *meaning*, so "monetary policy" finds the rate
+  decision and following "Space" surfaces a launch story that never says the
+  word. It is a [model2vec](https://github.com/MinishLab/model2vec) static
+  embedding table — a token → vector lookup with no neural network at
+  inference — so there is no WebAssembly, no runtime, no key and no server:
+  nothing you type or read leaves the machine. Strictly opt-in, cached for
+  offline use, and reversible from Settings.
 - **Self-updating** — the client refreshes on a timer and on refocus; the API is
   cached at the edge with `stale-while-revalidate`, so responses are instant and
   refreshed in the background. Meridian stays current with zero interaction.
@@ -83,6 +91,8 @@ meridian/
 │   ├── index.html    # App shell
 │   ├── styles.css    # Design system
 │   ├── app.js        # Rendering, search, self-refresh, PWA install
+│   ├── embed.js      # On-device semantic engine (WordPiece + static vectors)
+│   ├── models/potion # Quantised embedding table — built by scripts/make-embedding-model.mjs
 │   ├── sw.js         # Service worker (offline app shell)
 │   ├── 404.html      # Branded not-found page
 │   ├── manifest.webmanifest

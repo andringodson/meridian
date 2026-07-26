@@ -1,0 +1,6 @@
+# The embedding model is byte-exact data, not source. vectors.bin is binary and
+# vocab.txt is one token per line, read back with split('\n') by embed.js — if
+# Git rewrote those endings to CRLF on checkout (core.autocrlf=true on Windows),
+# every token would gain a trailing \r, match nothing, and the tokenizer would
+# silently turn all text into [UNK]. Never touch these files.
+public/models/** -text

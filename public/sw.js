@@ -1,9 +1,14 @@
 /* Meridian service worker — app-shell offline support.
    Shell: network-first (deploys apply on next load), cache fallback offline.
    Live API: network-first. */
-const SHELL = 'meridian-shell-v19';
+const SHELL = 'meridian-shell-v20';
 const STATE = 'meridian-state'; // tiny key-value store; survives shell upgrades
-const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/fluid.js', '/features.js', '/fonts/space-grotesk-latin.woff2', '/logo.svg', '/manifest.webmanifest', '/icons/icon.svg'];
+// The opt-in semantic model is 7.5MB the reader chose to download. It lives in
+// its own cache (written by embed.js) and must outlive shell upgrades, or every
+// deploy would silently bill them for it again.
+const MODEL = 'meridian-model-v1';
+const KEEP = [SHELL, STATE, MODEL];
+const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/fluid.js', '/features.js', '/embed.js', '/fonts/space-grotesk-latin.woff2', '/logo.svg', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -11,7 +16,7 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== SHELL && k !== STATE).map((k) => caches.delete(k))))
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => !KEEP.includes(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -29,6 +34,10 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(fetch(request).catch(() => caches.match(request)));
     return;
   }
+
+  // Model weights manage their own cache in embed.js — passing them through the
+  // shell logic below would store a second 7.5MB copy on every load.
+  if (url.pathname.startsWith('/models/')) return;
 
   // App shell: network-first so every deploy is live on the next load;
   // the cache copy only serves when offline.

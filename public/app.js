@@ -524,11 +524,52 @@ trendsEl?.addEventListener('click', (e) => {
    `search` pseudo-category served by /api/search and kept fresh by the same
    auto-refresh timer as any other view. */
 const searchInput = $('#search-input');
+
+/* Semantic matching (public/embed.js). A word-match pass always runs; when the
+   on-device model is loaded, stories that mean the same thing without sharing
+   any words are appended behind the literal hits, best first. Vectors are
+   memoised on the article — recomputing is ~30µs, but a keystroke re-scores the
+   whole feed. Thresholds come from measured separation: unrelated headlines
+   top out around 0.12, genuinely related ones start around 0.27. */
+const SEM_MIN = 0.28;
+// Measured against live feeds: a query the day's news genuinely covers peaks at
+// 0.32–0.52, nonsense ("underwater basket weaving") peaks near 0.15, and a
+// real-but-absent subject ("space launch" on a day with no space story) lands
+// around 0.30 — close enough to the floor to drag in something irrelevant. So
+// the semantic pass only engages when the best match is convincing, and then
+// keeps a band beneath it rather than everything above the floor.
+const SEM_ENGAGE = 0.32;
+const SEM_BAND = 0.12;
+const SEM_MAX_EXTRA = 24;
+const semanticOn = () => typeof Embed !== 'undefined' && Embed.ready;
+function articleVec(a) {
+  if (a.__vec === undefined) a.__vec = Embed.embed(`${a.title} ${a.summary || ''}`.slice(0, 400));
+  return a.__vec;
+}
+
 function applySearch() {
-  const q = searchInput.value.trim().toLowerCase();
-  const list = !q ? currentArticles
-    : currentArticles.filter((a) => (a.title + ' ' + a.source).toLowerCase().includes(q));
-  renderFeed(list);
+  const raw = searchInput.value.trim();
+  const q = raw.toLowerCase();
+  if (!q) { renderFeed(currentArticles); return; }
+  const lexical = currentArticles.filter((a) => (a.title + ' ' + a.source).toLowerCase().includes(q));
+  if (semanticOn() && raw.length >= 3) {
+    const qv = Embed.embed(raw);
+    if (qv) {
+      const already = new Set(lexical.map((a) => a.link));
+      const scored = currentArticles
+        .filter((a) => !already.has(a.link))
+        .map((a) => ({ a, s: Embed.similarity(qv, articleVec(a)) }))
+        .sort((x, y) => y.s - x.s);
+      const best = scored.length ? scored[0].s : 0;
+      const near = best >= SEM_ENGAGE
+        ? scored.filter((x) => x.s >= Math.max(SEM_MIN, best - SEM_BAND))
+          .slice(0, SEM_MAX_EXTRA).map((x) => x.a)
+        : [];
+      renderFeed(lexical.concat(near));
+      return;
+    }
+  }
+  renderFeed(lexical);
 }
 searchInput.addEventListener('input', applySearch);
 

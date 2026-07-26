@@ -74,9 +74,23 @@ applySettings();
 const SUGGESTED_TOPICS = ['AI', 'Space', 'Climate', 'Crypto', 'Football', 'Cricket', 'Elections', 'Movies'];
 function getTopics() { return getSettings().topics || []; }
 
+/* A reader's taste as one vector: the topics they follow plus the headlines
+   they actually saved, averaged. Ranking the pool against it catches stories a
+   keyword list would miss — following "Space" surfaces a launch-delay story
+   that never says the word. Saved stories alone are enough, so For You now
+   works before any topic is picked. */
+function tasteVector() {
+  if (!semanticOn()) return null;
+  const topics = getTopics().map((t) => Embed.embed(t));
+  const saved = (typeof getSaved === 'function' ? getSaved() : [])
+    .slice(0, 40).map((a) => Embed.embed(a.title || ''));
+  return Embed.centroid([...topics, ...topics, ...saved]); // topics weigh double — they were chosen deliberately
+}
+
 async function buildForYou() {
   const topics = getTopics();
-  if (!topics.length) return [];
+  const taste = tasteVector();
+  if (!topics.length && !taste) return [];
   const cats = ['top', 'world', 'business', 'technology', 'science', 'health', 'sports', 'entertainment'];
   const results = await Promise.allSettled(
     cats.map((c) => fetch(`/api/news?category=${c}`).then((r) => r.json()))
@@ -87,6 +101,17 @@ async function buildForYou() {
     for (const a of r.value.articles || []) {
       if (!seen.has(a.link)) { seen.add(a.link); pool.push(a); }
     }
+  }
+  if (taste) {
+    // Similarity carries the ranking; recency and a picture only break ties, or
+    // a week-old story on a favourite subject would outrank this morning's.
+    return pool
+      .map((a) => ({ a, s: Embed.similarity(taste, articleVec(a)) }))
+      .filter((x) => x.s >= SEM_MIN)
+      .map((x) => ({ ...x, s: x.s + recency(x.a) * 0.12 + (x.a.image ? 0.02 : 0) }))
+      .sort((x, y) => y.s - x.s)
+      .slice(0, 60)
+      .map((x) => x.a);
   }
   const terms = topics.map((t) => t.toLowerCase());
   return pool
@@ -102,6 +127,62 @@ async function buildForYou() {
     .slice(0, 60)
     .map((x) => x.a);
 }
+
+/* ---------- on-device semantic engine: opt-in, cached, reversible ---------- */
+const semanticToggle = $('#set-semantic');
+const semanticNote = $('#semantic-note');
+
+function setSemanticNote(msg, busy = false) {
+  if (!semanticNote) return;
+  semanticNote.textContent = msg;
+  semanticNote.classList.toggle('is-busy', busy);
+}
+
+async function enableSemantic({ silent = false } = {}) {
+  if (Embed.ready) return true;
+  setSemanticNote('Downloading the language model — one time, then it works offline…', true);
+  try {
+    await Embed.load();
+    const n = Embed.info;
+    setSemanticNote(`Ready — ${n.vocab.toLocaleString()} tokens, ${n.dims} dimensions, running on your device.`);
+    // Re-rank whatever is on screen with the model now available.
+    if (typeof applySearch === 'function' && searchInput?.value.trim()) applySearch();
+    else if (currentCat === 'foryou' && typeof loadNews === 'function') loadNews('foryou');
+    if (!silent) toast('Semantic search is on');
+    return true;
+  } catch (e) {
+    setSemanticNote('Couldn’t load the model. Check your connection and try again.');
+    if (semanticToggle) semanticToggle.checked = false;
+    saveSettings({ semantic: false });
+    if (!silent) toast('Model download failed');
+    return false;
+  }
+}
+
+semanticToggle?.addEventListener('change', async () => {
+  if (semanticToggle.checked) {
+    saveSettings({ semantic: true });
+    await enableSemantic();
+  } else {
+    saveSettings({ semantic: false });
+    await Embed.forget();
+    setSemanticNote('Off — search matches words only. Turning this on downloads 7.5 MB once.');
+    if (typeof applySearch === 'function' && searchInput?.value.trim()) applySearch();
+  }
+});
+
+// A reader who already opted in shouldn't have to opt in again — but a fresh
+// device must never pull 7.5MB uninvited, so an untouched setting only loads
+// when the files are already in the cache.
+(async () => {
+  if (!semanticToggle) return;
+  const wanted = !!getSettings().semantic;
+  const onDisk = await Embed.cached();
+  semanticToggle.checked = wanted;
+  if (wanted && onDisk) { await enableSemantic({ silent: true }); return; }
+  if (wanted) await enableSemantic({ silent: true });
+  else setSemanticNote('Off — search matches words only. Turning this on downloads 7.5 MB once.');
+})();
 
 /* settings sheet UI */
 const sheetEl = $('#settings-sheet');

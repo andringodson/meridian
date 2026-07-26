@@ -712,6 +712,14 @@ html, body { overscroll-behavior-y: contain; }
 .set-toggles { display: flex; flex-direction: column; gap: 10px; }
 .tgl { display: flex; align-items: center; gap: 10px; font-size: 13.5px; cursor: pointer; }
 .tgl input { accent-color: var(--accent); width: 16px; height: 16px; }
+/* Explains what a setting costs and what it does — sits under its toggle. */
+.set-note { margin: 8px 0 0; font-size: 12px; line-height: 1.55; color: var(--text-2); text-wrap: pretty; }
+.set-note.is-busy { color: var(--accent-hi); }
+.set-note.is-busy::after {
+  content: ''; display: inline-block; vertical-align: -1px; margin-left: 7px;
+  width: 9px; height: 9px; border: 1.5px solid currentColor; border-right-color: transparent;
+  border-radius: 50%; animation: spin .7s linear infinite;
+}
 
 /* ---------- settings effects ---------- */
 .ts-s .headline { font-size: 16px; }
