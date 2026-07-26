@@ -238,11 +238,55 @@ function setLive(ok) {
 /* View Transitions: category/view switches get a hardware-accelerated
    crossfade where the API exists (progressive enhancement — a plain call
    everywhere else, and never under reduced motion). */
+const motionOK = () =>
+  !document.documentElement.classList.contains('reduce-motion') &&
+  !matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 function withViewTransition(fn) {
-  const reduced = document.documentElement.classList.contains('reduce-motion') ||
-    matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (document.startViewTransition && !reduced) document.startViewTransition(fn);
+  if (document.startViewTransition && motionOK()) document.startViewTransition(fn);
   else fn();
+}
+
+/* ---------- card ↔ reader morph ----------
+   Give the tapped card's thumbnail and headline the same view-transition-name
+   as the reader's hero and title and the browser moves those two elements into
+   place, instead of cross-fading a whole new layer over the feed. A name may
+   only exist once at a time, so the card releases its names inside the DOM
+   update, exactly as the reader takes them, and both ends are cleared when the
+   transition settles. */
+const MORPH_HERO = 'story-hero';
+const MORPH_TITLE = 'story-title';
+const morphEls = new Set();
+function morphName(el, name) { if (el) { el.style.viewTransitionName = name; morphEls.add(el); } }
+function morphReset() { for (const el of morphEls) el.style.viewTransitionName = ''; morphEls.clear(); }
+const canMorph = () => !!document.startViewTransition && motionOK();
+
+// Only worth morphing to something the eye can actually see — cards far down a
+// long feed are also the ones `content-visibility` may not have rendered yet.
+function cardInView(el) {
+  if (!el) return false;
+  const r = el.getBoundingClientRect();
+  return r.bottom > 0 && r.top < innerHeight && r.height > 0;
+}
+
+// Runs `update` inside a transition that morphs `from` → whatever `update`
+// tags. Falls straight through where the API or the user's motion settings
+// say no.
+function morph(from, update) {
+  if (!canMorph()) { update(); return; }
+  morphReset();
+  for (const [el, name] of from) morphName(el, name);
+  const root = document.documentElement;
+  root.classList.add('morphing'); // suppress the panel's own entry keyframes
+  const t = document.startViewTransition(() => {
+    morphReset();          // the source lets the names go…
+    update();              // …and the destination claims them
+  });
+  // finished rejects when a transition is skipped (a second tap, a hidden tab).
+  // Settle both ways with the same cleanup — .finally alone would leave the
+  // rejection unhandled and log it.
+  const done = () => { morphReset(); root.classList.remove('morphing'); };
+  t.finished.then(done, done);
 }
 
 function applyNews(data) {
@@ -1019,12 +1063,16 @@ feedEl.addEventListener('click', async (e) => {
   }
 });
 
-/* reading progress bar */
+/* Reading progress bar. Where scroll-driven animations exist the bar is driven
+   entirely by CSS (animation-timeline: scroll()) on the compositor — no scroll
+   listener, no layout read per frame. This is only the fallback path. */
 const progressEl = $('#progress');
-addEventListener('scroll', () => {
-  const max = document.documentElement.scrollHeight - innerHeight;
-  if (progressEl) progressEl.style.width = `${max > 0 ? (scrollY / max) * 100 : 0}%`;
-}, { passive: true });
+if (progressEl && !CSS.supports('animation-timeline: scroll()')) {
+  addEventListener('scroll', () => {
+    const max = document.documentElement.scrollHeight - innerHeight;
+    progressEl.style.width = `${max > 0 ? (scrollY / max) * 100 : 0}%`;
+  }, { passive: true });
+}
 
 /* ---------- video briefs: reel of clips that open directly on YouTube.
    No embedded player — embeds proved unreliable (pulled clips, extensions,
@@ -1289,6 +1337,7 @@ function openReaderFromUrl(url, title = '') {
   if (reader.hidden) {
     reader.hidden = false;
     document.documentElement.classList.add('reader-lock');
+    pushReaderState();
   }
   showReader(0);
   $('.reader-close', reader)?.focus();
@@ -1298,18 +1347,58 @@ function openReaderFromFeed(idx) {
   readerList = renderedList.slice();          // stable snapshot
   if (!reader.hidden) return showReader(idx); // already open (unlikely) — just swap
   readerLastFocus = document.activeElement;
-  reader.hidden = false;
-  document.documentElement.classList.add('reader-lock');
-  showReader(idx);
-  $('.reader-close', reader)?.focus();
+  const card = feedEl.querySelectorAll('.card')[idx];
+  const open = () => {
+    reader.hidden = false;
+    document.documentElement.classList.add('reader-lock');
+    // showReader is async, but everything up to its first await — including
+    // renderReaderShell — runs synchronously, so the reader is fully in the DOM
+    // by the time this callback returns and the transition snapshots it.
+    showReader(idx);
+    morphName($('.reader-hero', reader), MORPH_HERO);
+    morphName($('.reader-title', reader), MORPH_TITLE);
+    $('.reader-close', reader)?.focus();
+  };
+  morph(cardInView(card) ? [[$('.thumb', card), MORPH_HERO], [$('.headline', card), MORPH_TITLE]] : [], open);
+  pushReaderState();
 }
+
+/* The reader is a view, so the back gesture should leave it — not the app.
+   Opening pushes a history entry; back pops it and lands here. Closing from the
+   UI just walks that entry back, so both routes end in the same place. */
+let readerStatePushed = false;
+function pushReaderState() {
+  if (readerStatePushed) return;
+  try { history.pushState({ meridianReader: true }, ''); readerStatePushed = true; } catch { /* opaque origin */ }
+}
+addEventListener('popstate', () => {
+  readerStatePushed = false;
+  if (!reader.hidden) dismissReader();
+});
 
 function closeReader() {
   if (reader.hidden) return;
-  reader.hidden = true;
-  readToken++; // drop any in-flight fetch
-  document.documentElement.classList.remove('reader-lock');
-  try { readerLastFocus?.focus(); } catch { /* gone */ }
+  // Let the history entry drive the close so the back button and the ✕ button
+  // can't drift out of sync; popstate calls dismissReader for us.
+  if (readerStatePushed) { history.back(); return; }
+  dismissReader();
+}
+
+function dismissReader() {
+  if (reader.hidden) return;
+  const a = readerList[readerIndex];
+  const card = a && feedEl.querySelector(`.card[href="${CSS.escape(a.link)}"]`);
+  const hide = () => {
+    reader.hidden = true;
+    readToken++; // drop any in-flight fetch
+    document.documentElement.classList.remove('reader-lock');
+    if (cardInView(card)) {
+      morphName($('.thumb', card), MORPH_HERO);
+      morphName($('.headline', card), MORPH_TITLE);
+    }
+    try { readerLastFocus?.focus(); } catch { /* gone */ }
+  };
+  morph([[$('.reader-hero', reader), MORPH_HERO], [$('.reader-title', reader), MORPH_TITLE]], hide);
 }
 
 reader.addEventListener('click', (e) => {

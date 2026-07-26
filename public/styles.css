@@ -251,6 +251,22 @@ a.tick:hover { background: rgba(255,255,255,0.05); }
 .card:hover { border-color: var(--accent); transform: translateY(-3px); }
 @keyframes card-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 
+/* Past the first screen the time-based stagger is wasted — those cards finish
+   animating long before anyone scrolls to them. Hand them a view timeline so
+   each one reveals as it actually arrives, and let the browser skip painting
+   the ones still far away. Both are progressive: without scroll-driven
+   animation support the stagger above stays exactly as it was. */
+@supports (animation-timeline: view()) {
+  .feed > .card:nth-child(n + 9) {
+    animation: card-in linear both;
+    animation-delay: 0s;
+    animation-timeline: view();
+    animation-range: entry 0% entry 45%;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 340px;
+  }
+}
+
 /* first card spans full width — the hero story */
 .card.lead { grid-column: 1 / -1; }
 .card.lead .thumb { aspect-ratio: 21 / 9; }
@@ -271,7 +287,9 @@ a.tick:hover { background: rgba(255,255,255,0.05); }
   color: rgba(255,255,255,0.9); mix-blend-mode: overlay;
 }
 .card-body { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
-.headline { font-family: var(--display); font-weight: 500; font-size: 18px; line-height: 1.22; letter-spacing: -0.02em; }
+/* balance keeps a 2–3 line headline from leaving one orphaned word on the last
+   line; pretty does the same job for running prose without the reflow cost. */
+.headline { font-family: var(--display); font-weight: 500; font-size: 18px; line-height: 1.22; letter-spacing: -0.02em; text-wrap: balance; }
 .card:hover .headline { color: #fff; }
 .summary {
   font-size: 13.5px; color: var(--text-2); line-height: 1.5;
@@ -440,6 +458,17 @@ body.view-markets .curators, body.view-markets main { display: none; }
   position: fixed; top: 0; left: 0; height: 2px; width: 0; z-index: 90;
   background: linear-gradient(90deg, var(--accent), #5b8cff);
   transition: width .12s linear;
+}
+/* Driven by the scroll position itself rather than a scroll listener: the bar
+   is full-width and scaled, so it runs on the compositor. app.js drops its
+   fallback listener when this is supported. */
+@supports (animation-timeline: scroll()) {
+  .progress {
+    width: 100%; transform: scaleX(0); transform-origin: 0 50%; transition: none;
+    animation: progress-scrub linear both;
+    animation-timeline: scroll(root block);
+  }
+  @keyframes progress-scrub { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 }
 
 /* ---------- magazine hero lead card ---------- */
@@ -619,12 +648,42 @@ html, body { overscroll-behavior-y: contain; }
   right: 18px; top: 64px; width: min(400px, calc(100vw - 24px));
   border-radius: 14px; padding: 18px 20px 22px; max-height: min(78vh, 620px); overflow-y: auto;
 }
+
+/* The sheet and its backdrop toggle [hidden], so they used to appear and
+   vanish outright — an entry keyframe on mobile and nothing on the way out.
+   Transitioning display itself (allow-discrete) with a @starting-style for the
+   pre-open state animates both directions, with no class juggling in JS. */
+@supports (transition-behavior: allow-discrete) {
+  @media (prefers-reduced-motion: no-preference) {
+    .sheet, .sheet-backdrop {
+      transition: opacity .22s ease, transform .22s cubic-bezier(.2, .7, .2, 1),
+                  display .22s allow-discrete;
+    }
+    .sheet-backdrop { opacity: 1; }
+    .sheet { opacity: 1; transform: none; animation: none; }
+    /* closed — both the state we start from and the one we leave towards */
+    .sheet[hidden], .sheet-backdrop[hidden] { opacity: 0; display: none; }
+    .sheet[hidden] { transform: translateY(8px) scale(.985); }
+    @starting-style {
+      .sheet:not([hidden]), .sheet-backdrop:not([hidden]) { opacity: 0; }
+      .sheet:not([hidden]) { transform: translateY(8px) scale(.985); }
+    }
+    @media (max-width: 700px) {
+      .sheet[hidden] { transform: translateY(24%); }
+      @starting-style { .sheet:not([hidden]) { transform: translateY(24%); } }
+    }
+  }
+}
 @media (max-width: 700px) {
   .sheet {
     right: 0; left: 0; top: auto; bottom: 0; width: auto;
     border-radius: 16px 16px 0 0; border-bottom: 0;
     padding-bottom: calc(22px + env(safe-area-inset-bottom));
-    animation: sheet-up .25s ease both;
+  }
+  /* Entry keyframe only where the two-way transition above can't run — it sits
+     after that block, so left ungated it would win and animate the open twice. */
+  @supports not (transition-behavior: allow-discrete) {
+    .sheet { animation: sheet-up .25s ease both; }
   }
   @keyframes sheet-up { from { transform: translateY(30%); opacity: 0; } to { transform: none; opacity: 1; } }
 }
@@ -756,6 +815,23 @@ html.reader-lock, html.reader-lock body { overflow: hidden; }
   overflow: hidden; animation: r-panel .26s cubic-bezier(.2,.7,.2,1) both;
 }
 @keyframes r-panel { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* ---------- card ↔ reader morph ----------
+   The thumbnail flies into the hero slot and the headline into the title. The
+   panel's own entry keyframes are suppressed while that runs, or the two would
+   animate the same thing twice. */
+html.morphing .reader-panel, html.morphing .reader-backdrop { animation: none; }
+::view-transition-group(story-hero),
+::view-transition-group(story-title) {
+  animation-duration: .34s;
+  animation-timing-function: cubic-bezier(.2, .7, .2, 1);
+}
+/* Thumb and hero are different shapes; without this the picture squashes to
+   each snapshot's box on the way across instead of staying cropped. */
+::view-transition-old(story-hero),
+::view-transition-new(story-hero) { height: 100%; object-fit: cover; }
+::view-transition-old(story-title),
+::view-transition-new(story-title) { height: auto; }
 .reader-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 10px 12px; border-bottom: 1px solid var(--border);
@@ -788,7 +864,7 @@ html.reader-lock, html.reader-lock body { overflow: hidden; }
   font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-2);
 }
 .reader-src { color: var(--accent-hi); }
-.reader-title { font-size: clamp(24px, 4vw, 34px); line-height: 1.14; margin: 12px 0 18px; }
+.reader-title { font-size: clamp(24px, 4vw, 34px); line-height: 1.14; margin: 12px 0 18px; text-wrap: balance; }
 .reader-actions {
   display: flex; flex-wrap: wrap; gap: 8px;
   padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--border);
@@ -807,7 +883,7 @@ html.reader-lock, html.reader-lock body { overflow: hidden; }
 }
 .reader-act:hover, .reader-act.on { color: var(--text); border-color: var(--accent); }
 .reader-body { font-size: clamp(15.5px, 1.6vw, 17px); line-height: 1.72; color: #e6e6e6; }
-.reader-body p { margin: 0 0 16px; }
+.reader-body p { margin: 0 0 16px; text-wrap: pretty; }
 .reader-body p:first-child { color: #fff; font-size: 1.05em; }
 .reader-status { color: var(--text-2); font-style: italic; }
 .reader-cont { margin-top: 4px; }
