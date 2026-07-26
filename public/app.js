@@ -360,8 +360,13 @@ const motionOK = () =>
   !matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 function withViewTransition(fn) {
-  if (document.startViewTransition && motionOK()) document.startViewTransition(fn);
-  else fn();
+  if (!document.startViewTransition || !motionOK()) { fn(); return; }
+  // A skipped transition (a second tap, a backgrounded tab) rejects BOTH ready
+  // and finished with AbortError. Nothing here needs to react to that, but an
+  // unobserved rejection is logged as an uncaught error, so both are settled.
+  const t = document.startViewTransition(fn);
+  t.ready.catch(() => {});
+  t.finished.catch(() => {});
 }
 
 /* ---------- card ↔ reader morph ----------
@@ -399,11 +404,13 @@ function morph(from, update) {
     morphReset();          // the source lets the names go…
     update();              // …and the destination claims them
   });
-  // finished rejects when a transition is skipped (a second tap, a hidden tab).
-  // Settle both ways with the same cleanup — .finally alone would leave the
-  // rejection unhandled and log it.
+  // A skipped transition (a second tap, a hidden tab) rejects both ready and
+  // finished with AbortError. finished carries the cleanup either way; ready is
+  // settled purely so its rejection is observed — an unobserved one surfaces as
+  // an uncaught error in the console.
   const done = () => { morphReset(); root.classList.remove('morphing'); };
   t.finished.then(done, done);
+  t.ready.catch(() => {});
 }
 
 function applyNews(data) {
