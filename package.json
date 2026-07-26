@@ -12,7 +12,8 @@
     "start": "vercel dev",
     "build": "node scripts/build.mjs",
     "preview": "node scripts/serve.mjs dist 8080",
-    "check:images": "node scripts/check-images.mjs"
+    "check:images": "node scripts/check-images.mjs",
+    "smoke": "node scripts/smoke.mjs"
   },
   "author": "Andrin Godson",
   "license": "MIT",

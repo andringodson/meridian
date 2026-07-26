@@ -1,0 +1,41 @@
+# End-to-end browser check of the live deployment.
+#
+# image-check probes the API; this drives the actual app in Chrome. The gap
+# between them is where a real outage hid: a service-worker change broke ~85% of
+# preview images in production while every API check stayed green.
+name: smoke
+
+on:
+  schedule:
+    - cron: '42 7 * * *' # daily, 07:42 UTC — offset from image-check
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'public/**'
+      - 'api/**'
+      - 'scripts/smoke.mjs'
+      - 'vercel.json'
+      - '.github/workflows/smoke.yml'
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      # The runner image ships Chrome; fail loudly here rather than deep inside
+      # the test if that ever stops being true.
+      - name: Locate Chrome
+        run: |
+          google-chrome --version
+          echo "CHROME_PATH=$(command -v google-chrome)" >> "$GITHUB_ENV"
+      # On push, production is still being deployed by hand, so grading it
+      # immediately would test the previous build.
+      - if: github.event_name == 'push'
+        run: sleep 150
+      # Zero dependencies — Chrome is driven over CDP with Node's own WebSocket.
+      - run: node scripts/smoke.mjs

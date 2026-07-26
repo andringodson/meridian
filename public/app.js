@@ -285,10 +285,22 @@ pillEl.addEventListener('click', () => {
   scrollTo({ top: 0, behavior: 'smooth' });
 });
 
+/* The lead card's picture is the largest thing on the page and the one the
+   reader looks at first — lazy-loading it pushed it out of contention for
+   Largest Contentful Paint entirely (measured: LCP landed on a paragraph
+   instead). It loads eagerly at high priority; everything below stays lazy.
+
+   sizes describes the slot, not the image: one column on a phone, roughly a
+   third of the viewport for a card and two-thirds for the full-width lead. */
+const LEAD_SIZES = '(max-width: 620px) 100vw, 60vw';
+const CARD_SIZES = '(max-width: 620px) 100vw, 30vw';
+
 function cardHTML(a, lead, i) {
   const showImg = a.image && !document.documentElement.classList.contains('data-saver');
+  const resp = a.srcset ? ` srcset="${esc(a.srcset)}" sizes="${lead ? LEAD_SIZES : CARD_SIZES}"` : '';
+  const prio = lead ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"';
   const thumb = showImg
-    ? `<div class="thumb"><img src="${esc(a.image)}" alt="" loading="lazy" decoding="async"
+    ? `<div class="thumb"><img src="${esc(a.image)}"${resp} alt="" ${prio} decoding="async"
          referrerpolicy="no-referrer" data-fallback="${gradientFor(a.title)}" /></div>`
     : `<div class="thumb noimg" style="background-image:${gradientFor(a.title)}">
          <span class="glyph">${esc((a.source || '?').trim().charAt(0).toUpperCase())}</span>
@@ -1428,8 +1440,11 @@ function relatedHTML(a) {
 }
 
 function renderReaderShell(a) {
+  // The reader panel is at most 720px wide, so the 1200px variant is only ever
+  // needed on a high-density screen.
+  const heroResp = a.srcset ? ` srcset="${esc(a.srcset)}" sizes="(max-width: 760px) 100vw, 720px"` : '';
   const hero = a.image
-    ? `<div class="reader-hero"><img src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" data-fallback="${gradientFor(a.title)}" /></div>`
+    ? `<div class="reader-hero"><img src="${esc(a.image)}"${heroResp} alt="" fetchpriority="high" referrerpolicy="no-referrer" data-fallback="${gradientFor(a.title)}" /></div>`
     : `<div class="reader-hero noimg" style="background-image:${gradientFor(a.title)}"><span class="glyph">${esc((a.source || '?').trim().charAt(0).toUpperCase())}</span></div>`;
   const saved = isSaved(a.link);
   readerScroll.innerHTML = `

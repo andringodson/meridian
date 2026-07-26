@@ -241,6 +241,46 @@ function upgradeImage(url) {
   } catch { return url; }
 }
 
+/* ---------- responsive variants ----------
+   A card slot is ~390 CSS px on a phone and ~400 on a desktop; the lead spans
+   ~820. Serving one 1200px file into all of them costs real money on a phone —
+   a single BBC thumbnail measured 789 KB. Where a CDN exposes its width we hand
+   the browser a choice and let it pick.
+
+   Signed resizers are excluded for the same reason upgradeImage leaves them
+   alone: altering any size parameter voids the signature and the CDN returns an
+   error page instead of a picture. */
+const SRCSET_WIDTHS = [480, 800, 1200];
+
+function imageAtWidth(url, w) {
+  if (/i\.guim\.co\.uk/i.test(url) || /\/resize\/[0-9a-f]{40}\//i.test(url)) return null;
+  // BBC ichef carries the width in the path.
+  if (/ichef\.bbci\.co\.uk\/(?:ace\/)?[a-z_]+\/\d{2,4}\//i.test(url)) {
+    return url.replace(/(ichef\.bbci\.co\.uk\/(?:ace\/)?[a-z_]+)\/\d{2,4}\//i, `$1/${w}/`);
+  }
+  // NPR's dims3 resizer: keep the aspect ratio of the crop it asked for.
+  if (/brightspotcdn\.com\/dims3\//i.test(url)) {
+    return url.replace(/\/resize\/(\d+)x(\d+)(!?)\//i,
+      (m, ow, oh, ex) => `/resize/${w}x${Math.round((+oh / +ow) * w)}${ex}/`);
+  }
+  // France 24 puts it in a path segment.
+  if (/\/w:\d+\//i.test(url)) return url.replace(/\/w:\d+\//i, `/w:${w}/`);
+  // Query-sized CDNs (Independent, Fortune, NASA, WordPress…).
+  if (/[?&](?:width|w)=\d+/i.test(url)) return url.replace(/([?&](?:width|w))=\d+/gi, `$1=${w}`);
+  return null;
+}
+
+// Only worth emitting when there are genuinely different sizes to choose from.
+function srcsetFor(url) {
+  if (!url) return null;
+  const parts = [];
+  for (const w of SRCSET_WIDTHS) {
+    const u = imageAtWidth(url, w);
+    if (u) parts.push(`${u} ${w}w`);
+  }
+  return parts.length >= 2 ? parts.join(', ') : null;
+}
+
 // URLs arrive entity-escaped (processEntities is off); a literal "&#038;" in a
 // query string reads as a fragment marker in the browser and hides the params
 // behind it from upgradeImage.
@@ -335,13 +375,15 @@ function normalize(item, feedUrl) {
   // the same newsroom twice in a cluster and inflate the source tally.
   const pub = identify(source, link);
   const published = item.pubDate || item.published || item.updated || '';
+  const img = extractImage(item);
   return {
     title,
     link,
     source: pub ? pub.name : '',
     publisher: pub ? pub.key : null,
     summary: stripHtml(item.description?.['#text'] ?? item.description ?? '').slice(0, 240),
-    image: extractImage(item),
+    image: img,
+    srcset: srcsetFor(img),
     publishedAt: published ? new Date(published).toISOString() : null,
   };
 }
