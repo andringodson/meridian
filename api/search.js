@@ -6,8 +6,16 @@
 import { XMLParser } from 'fast-xml-parser';
 import { identify, PUBLISHERS } from './_publishers.js';
 
-const gnSearch = (q) =>
-  `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
+// Same edition triple as api/news.js, so a search returns the same regional
+// slice of the news the feed is showing.
+const EDITION_LOCALE = {
+  us: ['en-US', 'US', 'US:en'], gb: ['en-GB', 'GB', 'GB:en'], in: ['en-IN', 'IN', 'IN:en'],
+  au: ['en-AU', 'AU', 'AU:en'], ca: ['en-CA', 'CA', 'CA:en'],
+};
+const gnSearch = (q, edition = 'us') => {
+  const [hl, gl, ceid] = EDITION_LOCALE[edition] || EDITION_LOCALE.us;
+  return `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=${hl}&gl=${gl}&ceid=${encodeURIComponent(ceid)}`;
+};
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -174,6 +182,7 @@ function clusterStories(list) {
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   const q = String(req.query?.q || '').trim().slice(0, 120);
+  const edition = EDITION_LOCALE[String(req.query?.edition || '').toLowerCase()] ? String(req.query.edition).toLowerCase() : 'us';
   if (q.length < 2) {
     res.status(400).json({ error: 'query too short', query: q });
     return;
@@ -181,7 +190,7 @@ export default async function handler(req, res) {
 
   let articles = [];
   try {
-    articles = parseFeed(await fetchText(gnSearch(q)));
+    articles = parseFeed(await fetchText(gnSearch(q, edition)));
   } catch {
     res.setHeader('Cache-Control', 's-maxage=30');
     res.status(502).json({ error: 'search unavailable', query: q });

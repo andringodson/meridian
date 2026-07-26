@@ -29,6 +29,15 @@ const CAT_LABEL = {
 // reading queue below uses it, and loadNews can fire during boot.
 const onIdle = (fn, timeout) => ('requestIdleCallback' in window ? requestIdleCallback(fn, { timeout }) : setTimeout(fn, timeout));
 
+/* Which edition of the news to read. The API localises Google News by this and
+   adds that region's mastheads, so it changes what the whole app reports —
+   every fetch has to carry it or the tabs would disagree with each other. */
+function currentEdition() {
+  try { return (JSON.parse(localStorage.getItem('meridian-settings')) || {}).edition || 'us'; }
+  catch { return 'us'; }
+}
+const edParam = () => `&edition=${encodeURIComponent(currentEdition())}`;
+
 /* ---------- saved stories (localStorage, keyed by link) ---------- */
 const SAVE_KEY = 'meridian-saved';
 function getSaved() {
@@ -458,7 +467,7 @@ async function loadNews(cat, { skeleton = true } = {}) {
     if (!currentQuery) { feedEl.innerHTML = `<p class="empty">Type a search and press Enter.</p>`; return; }
     if (skeleton) renderSkeleton();
     try {
-      const r = await fetch(`/api/search?q=${encodeURIComponent(currentQuery)}`, { cache: 'no-store' });
+      const r = await fetch(`/api/search?q=${encodeURIComponent(currentQuery)}${edParam()}`, { cache: 'no-store' });
       const data = await r.json();
       lastFetch = Date.now();
       currentArticles = data.articles || [];
@@ -495,7 +504,7 @@ async function loadNews(cat, { skeleton = true } = {}) {
   }
   if (skeleton) renderSkeleton();
   try {
-    const r = await fetch(`/api/news?category=${encodeURIComponent(cat)}`, { cache: 'no-store' });
+    const r = await fetch(`/api/news?category=${encodeURIComponent(cat)}${edParam()}`, { cache: 'no-store' });
     const data = await r.json();
     lastFetch = Date.now();
     // Background poll while the reader is scrolled down: offer, don't yank.
@@ -755,7 +764,7 @@ let peekToken = 0;
 async function peekData(cat) {
   const hit = peekCache.get(cat);
   if (hit && Date.now() - hit.at < REFRESH_MS) return hit.articles;
-  const r = await fetch(`/api/news?category=${encodeURIComponent(cat)}`);
+  const r = await fetch(`/api/news?category=${encodeURIComponent(cat)}${edParam()}`);
   const data = await r.json();
   peekCache.set(cat, { at: Date.now(), articles: data.articles || [] });
   return data.articles || [];

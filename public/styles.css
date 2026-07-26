@@ -704,6 +704,8 @@ html, body { overscroll-behavior-y: contain; }
 }
 #topic-input:focus { border-color: var(--accent); }
 .seg { display: flex; gap: 4px; }
+/* Five editions don't fit one row on a phone. */
+.seg-wrap { flex-wrap: wrap; }
 .seg button {
   background: none; border: 1px solid var(--border); color: var(--text-2); cursor: pointer;
   font: 600 11.5px var(--display); padding: 7px 14px; border-radius: 999px;

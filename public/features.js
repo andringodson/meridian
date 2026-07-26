@@ -93,7 +93,7 @@ async function buildForYou() {
   if (!topics.length && !taste) return [];
   const cats = ['top', 'world', 'business', 'technology', 'science', 'health', 'sports', 'entertainment'];
   const results = await Promise.allSettled(
-    cats.map((c) => fetch(`/api/news?category=${c}`).then((r) => r.json()))
+    cats.map((c) => fetch(`/api/news?category=${c}${edParam()}`).then((r) => r.json()))
   );
   const seen = new Set(); const pool = [];
   for (const r of results) {
@@ -193,6 +193,7 @@ function openSheet() {
   const s = getSettings();
   sheetEl.querySelectorAll('#set-text button').forEach((b) => b.classList.toggle('on', b.dataset.v === (s.text || 'm')));
   sheetEl.querySelectorAll('#set-default button').forEach((b) => b.classList.toggle('on', b.dataset.v === (s.defaultTab || 'top')));
+  sheetEl.querySelectorAll('#set-edition button').forEach((b) => b.classList.toggle('on', b.dataset.v === (s.edition || 'us')));
   $('#set-datasaver').checked = !!s.datasaver;
   $('#set-motion').checked = !!s.motion;
   const nBox = $('#set-notify');
@@ -239,6 +240,17 @@ $('#set-default')?.addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   saveSettings({ defaultTab: b.dataset.v });
   $('#set-default').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+});
+$('#set-edition')?.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b || b.classList.contains('on')) return;
+  saveSettings({ edition: b.dataset.v });
+  $('#set-edition').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+  // The edition changes what every tab reports, so nothing already fetched is
+  // still valid: drop the per-tab unread counts and reload the current view.
+  if (typeof tabNew !== 'undefined') { tabNew.clear?.(); document.querySelectorAll('.tab .tab-new').forEach((n) => n.remove()); }
+  loadNews(currentCat);
+  if (typeof loadVideos === 'function' && typeof reelLoaded !== 'undefined' && reelLoaded) loadVideos();
+  toast(`Edition: ${b.textContent.trim()}`);
 });
 $('#set-datasaver')?.addEventListener('change', (e) => {
   saveSettings({ datasaver: e.target.checked });

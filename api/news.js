@@ -9,6 +9,72 @@ const GN = 'https://news.google.com/rss';
 const gnTopic = (id) =>
   `${GN}/headlines/section/topic/${id}?hl=en-US&gl=US&ceid=US:en`;
 
+/* ---------- editions ----------
+   Google News topic feeds are localised by their hl/gl/ceid triple, so pointing
+   them at another edition regionalises every category at once — no per-category
+   work. The curated publisher feeds below are fixed to their newsroom, so each
+   edition also names a few local mastheads; the round-robin interleave then
+   gives local and international outlets a fair share of the page rather than
+   letting whichever feed is largest dominate. */
+const EDITIONS = {
+  us: { label: 'United States', hl: 'en-US', gl: 'US', ceid: 'US:en' },
+  gb: { label: 'United Kingdom', hl: 'en-GB', gl: 'GB', ceid: 'GB:en' },
+  in: { label: 'India', hl: 'en-IN', gl: 'IN', ceid: 'IN:en' },
+  au: { label: 'Australia', hl: 'en-AU', gl: 'AU', ceid: 'AU:en' },
+  ca: { label: 'Canada', hl: 'en-CA', gl: 'CA', ceid: 'CA:en' },
+};
+const DEFAULT_EDITION = 'us';
+
+// Every one of these was probed for a parseable body and image-bearing items
+// before being listed; feeds that 404, time out or ship imageless stubs are not
+// here (scroll.in blows fast-xml-parser's nesting cap, ctvnews.ca 404s).
+const EDITION_FEEDS = {
+  in: {
+    top: [
+      'https://www.thehindu.com/news/national/feeder/default.rss',
+      'https://indianexpress.com/section/india/feed/',
+      'https://feeds.feedburner.com/ndtvnews-top-stories',
+      'https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml',
+      'https://timesofindia.indiatimes.com/rssfeedstopstories.cms',
+      'https://www.news18.com/commonfeeds/v1/eng/rss/india.xml',
+    ],
+    business: ['https://www.livemint.com/rss/news', 'https://indianexpress.com/section/business/feed/'],
+    technology: ['https://indianexpress.com/section/technology/feed/'],
+    sports: ['https://www.thehindu.com/sport/feeder/default.rss'],
+  },
+  gb: {
+    top: ['https://www.telegraph.co.uk/news/rss.xml', 'https://www.standard.co.uk/rss'],
+  },
+  au: {
+    top: ['https://www.theguardian.com/australia-news/rss', 'https://www.smh.com.au/rss/feed.xml'],
+  },
+  ca: {
+    top: ['https://globalnews.ca/feed/', 'https://www.cbc.ca/webfeed/rss/rss-topstories'],
+  },
+};
+
+const editionOf = (q) => {
+  const key = String(q || '').toLowerCase();
+  return EDITIONS[key] ? key : DEFAULT_EDITION;
+};
+
+// Only Google News URLs carry a locale; a masthead's own feed is left alone.
+function localize(url, ed) {
+  if (!/news\.google\.com/i.test(url)) return url;
+  return url
+    .replace(/hl=[^&]*/, `hl=${ed.hl}`)
+    .replace(/gl=[^&]*/, `gl=${ed.gl}`)
+    .replace(/ceid=[^&]*/, `ceid=${encodeURIComponent(ed.ceid)}`);
+}
+
+function feedsFor(category, editionKey) {
+  const ed = EDITIONS[editionKey];
+  const base = (FEEDS[category] || FEEDS.top).map((u) => localize(u, ed));
+  const extra = (EDITION_FEEDS[editionKey] || {})[category] || [];
+  // De-duplicate: an edition may name a masthead the base list already carries.
+  return [...new Set([...base, ...extra])];
+}
+
 // Category → list of source feeds. Google News topic feeds aggregate many
 // publishers; a couple of direct feeds add variety and resilience.
 const FEEDS = {
@@ -383,7 +449,8 @@ function clusterStories(list) {
 
 export default async function handler(req, res) {
   const category = String(req.query?.category || 'top').toLowerCase();
-  const feeds = FEEDS[category] || FEEDS.top;
+  const edition = editionOf(req.query?.edition);
+  const feeds = feedsFor(category, edition);
 
   const results = await Promise.allSettled(feeds.map((f) => fetchText(f)));
   let articles = [];
@@ -463,6 +530,8 @@ export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.status(200).json({
     category,
+    edition,
+    editions: Object.fromEntries(Object.entries(EDITIONS).map(([k, v]) => [k, v.label])),
     count: articles.length,
     sources: sourceCount,
     // Provenance for every outlet on screen, sent once rather than per article.

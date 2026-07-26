@@ -52,6 +52,23 @@ export const PUBLISHERS = {
   'news.sky.com':          { name: 'Sky News',                country: 'GB', ownership: 'private' },
   'skysports.com':         { name: 'Sky Sports',              country: 'GB', ownership: 'private' },
 
+  'telegraph.co.uk':       { name: 'The Telegraph',           country: 'GB', ownership: 'private' },
+  'standard.co.uk':        { name: 'Evening Standard',        country: 'GB', ownership: 'private' },
+
+  'thehindu.com':          { name: 'The Hindu',               country: 'IN', ownership: 'private' },
+  'indianexpress.com':     { name: 'The Indian Express',      country: 'IN', ownership: 'private' },
+  'ndtv.com':              { name: 'NDTV',                    country: 'IN', ownership: 'private' },
+  'hindustantimes.com':    { name: 'Hindustan Times',         country: 'IN', ownership: 'private' },
+  'indiatimes.com':        { name: 'The Times of India',      country: 'IN', ownership: 'private' },
+  'livemint.com':          { name: 'Mint',                    country: 'IN', ownership: 'private' },
+  'news18.com':            { name: 'News18',                  country: 'IN', ownership: 'private' },
+  'scroll.in':             { name: 'Scroll.in',               country: 'IN', ownership: 'private' },
+  'thewire.in':            { name: 'The Wire',                country: 'IN', ownership: 'nonprofit' },
+
+  'abc.net.au':            { name: 'ABC News (Australia)',    country: 'AU', ownership: 'public' },
+  'smh.com.au':            { name: 'The Sydney Morning Herald', country: 'AU', ownership: 'private' },
+  'globalnews.ca':         { name: 'Global News',             country: 'CA', ownership: 'private' },
+
   'france24.com':          { name: 'France 24',               country: 'FR', ownership: 'public' },
   'dw.com':                { name: 'Deutsche Welle',          country: 'DE', ownership: 'public' },
   'aljazeera.com':         { name: 'Al Jazeera',              country: 'QA', ownership: 'public' },
@@ -67,7 +84,7 @@ export const OWNERSHIP_LABEL = {
 
 export const COUNTRY_LABEL = {
   US: 'United States', GB: 'United Kingdom', FR: 'France',
-  DE: 'Germany', QA: 'Qatar', CA: 'Canada',
+  DE: 'Germany', QA: 'Qatar', CA: 'Canada', IN: 'India', AU: 'Australia',
 };
 
 // Feed subdomains that are not the brand's public host.
@@ -94,6 +111,15 @@ for (const [alias, key] of Object.entries({
   'npr': 'npr.org', 'cbs news': 'cbsnews.com', 'cbs sports': 'cbssports.com',
   'france 24': 'france24.com', 'ars technica': 'arstechnica.com',
   'the hollywood reporter': 'hollywoodreporter.com', 'yahoo sports': 'sports.yahoo.com',
+  // Regional mastheads, under the names Google News prints for them.
+  'the telegraph': 'telegraph.co.uk', 'evening standard': 'standard.co.uk',
+  'the hindu': 'thehindu.com', 'the indian express': 'indianexpress.com',
+  'indian express': 'indianexpress.com', 'hindustan times': 'hindustantimes.com',
+  'times of india': 'indiatimes.com', 'the times of india': 'indiatimes.com',
+  'the economic times': 'indiatimes.com', 'ndtv': 'ndtv.com', 'mint': 'livemint.com',
+  'livemint': 'livemint.com', 'news18': 'news18.com', 'the wire': 'thewire.in',
+  'abc news (australia)': 'abc.net.au', 'sydney morning herald': 'smh.com.au',
+  'the sydney morning herald': 'smh.com.au', 'global news': 'globalnews.ca',
 })) byName.set(alias, key);
 
 const normHost = (h) => {
