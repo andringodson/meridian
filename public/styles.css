@@ -242,7 +242,10 @@ h1, h2, h3, .display { font-family: var(--display); font-weight: 500; letter-spa
 
 /* ---------- markets ticker ---------- */
 .ticker {
-  position: sticky; top: 61px; z-index: 31;
+  /* Must share the tab rail's basis. Left at a hand-counted 61px against a
+     topbar that actually measures 65, the ticker stuck 4px high — which opened
+     a 4px slot under it for the retracted rail to peek through. */
+  position: sticky; top: var(--topbar-h, 61px); z-index: 31;
   overflow: hidden; white-space: nowrap;
   background: var(--bar-solid); backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border);
