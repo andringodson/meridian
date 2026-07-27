@@ -194,6 +194,8 @@ function openSheet() {
   sheetEl.querySelectorAll('#set-text button').forEach((b) => b.classList.toggle('on', b.dataset.v === (s.text || 'm')));
   sheetEl.querySelectorAll('#set-default button').forEach((b) => b.classList.toggle('on', b.dataset.v === (s.defaultTab || 'top')));
   sheetEl.querySelectorAll('#set-edition button').forEach((b) => b.classList.toggle('on', b.dataset.v === (s.edition || 'us')));
+  sheetEl.querySelectorAll('#set-theme button').forEach((b) => b.classList.toggle('on', b.dataset.v === (s.theme || 'dark')));
+  setThemeNote(s.theme || 'dark');
   $('#set-datasaver').checked = !!s.datasaver;
   $('#set-motion').checked = !!s.motion;
   const nBox = $('#set-notify');
@@ -231,6 +233,27 @@ $('#topic-add')?.addEventListener('submit', (e) => {
   input.value = '';
   renderTopicChips();
 });
+/* ---------- appearance ----------
+   theme.js owns the classes and the system subscription; this is only the
+   control surface. Writing `theme` into the same settings blob is what the boot
+   script reads on the next visit. */
+const THEME_NOTE = {
+  dark: 'Dark is Meridian’s default canvas. System follows your device, switching with it.',
+  light: 'Light canvas, same accent. Greys are re-picked for contrast on white, not inverted.',
+  system: 'Following your device — Meridian switches when your system does.',
+};
+function setThemeNote(v) {
+  const el = $('#theme-note');
+  if (el) el.textContent = THEME_NOTE[v] || THEME_NOTE.dark;
+}
+$('#set-theme')?.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b || b.classList.contains('on')) return;
+  saveSettings({ theme: b.dataset.v });
+  $('#set-theme').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+  Theme.apply(b.dataset.v);
+  setThemeNote(b.dataset.v);
+});
+
 $('#set-text')?.addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   saveSettings({ text: b.dataset.v });

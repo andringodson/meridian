@@ -1,7 +1,7 @@
 /* Meridian service worker — app-shell offline support.
    Shell: network-first (deploys apply on next load), cache fallback offline.
    Live API: network-first. */
-const SHELL = 'meridian-shell-v26';
+const SHELL = 'meridian-shell-v27';
 const STATE = 'meridian-state'; // tiny key-value store; survives shell upgrades
 // The opt-in semantic model is 7.5MB the reader chose to download. It lives in
 // its own cache (written by embed.js) and must outlive shell upgrades, or every
@@ -11,7 +11,9 @@ const MODEL = 'meridian-model-v1';
 // queue survives a lost connection — and a deploy.
 const READING = 'meridian-reading-v1';
 const KEEP = [SHELL, STATE, MODEL, READING];
-const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/fluid.js', '/features.js', '/embed.js', '/fonts/space-grotesk-latin.woff2', '/logo.svg', '/manifest.webmanifest', '/icons/icon.svg'];
+// theme.js is render-blocking in <head>: if it were ever missing offline the
+// shell would paint with the markup's fallback theme, so it belongs here.
+const ASSETS = ['/', '/index.html', '/styles.css', '/theme.js', '/app.js', '/fluid.js', '/features.js', '/embed.js', '/assistant.js', '/fonts/space-grotesk-latin.woff2', '/logo.svg', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

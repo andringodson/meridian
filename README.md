@@ -68,6 +68,18 @@ connection at all.
   inference — so there is no WebAssembly, no runtime, no key and no server:
   nothing you type or read leaves the machine. Strictly opt-in, cached for
   offline use, and reversible from Settings.
+- **A grounded news assistant** — ask about what is actually on your screen:
+  summarise the open story, get the background behind it, or have the day's
+  headlines briefed. It answers from the supplied material only and is told to
+  say so when that material falls short, so it reports rather than speculates.
+  Runs on an open-weights model (Llama 3.3 70B by default) behind a serverless
+  route, so no key ever reaches the browser and the page keeps `connect-src
+  'self'`. With no key configured it degrades to on-device extractive
+  summarising instead of disappearing. See [Assistant setup](#assistant-setup).
+- **Dark and light** — the black canvas is still the default and still the brand,
+  but Settings → Appearance offers Light and System. Every colour resolves
+  through a token, and the light greys are re-picked against white rather than
+  inverted, so contrast holds at small sizes.
 - **Self-updating** — the client refreshes on a timer and on refocus; the API is
   cached at the edge with `stale-while-revalidate`, so responses are instant and
   refreshed in the background. Meridian stays current with zero interaction.
@@ -92,6 +104,17 @@ muted secondary grey, hairline `#222` borders, and a single electric-blue accent
 for Fellix); body text is Arial. Surfaces are flat — depth comes from borders,
 never shadows.
 
+Both themes come out of one token block at the top of `styles.css`; there is no
+second stylesheet and no duplicated palette. Light is a re-pick rather than an
+inversion — `#999` secondary text is 2.8:1 on white and fails, so the light
+greys are chosen against white independently, and a selected pill swaps its
+label to the accent because white on a 9%-opacity tint is invisible.
+
+`theme.js` is render-blocking in `<head>` on purpose: it stamps the palette class
+on `<html>` before the first paint, so switching never flashes. It is a separate
+file rather than an inline script because the page ships `script-src 'self'`
+with no hash allowance.
+
 ## Architecture
 
 Meridian is a static front end over a thin serverless API, deployed as one
@@ -103,11 +126,14 @@ meridian/
 ├── api/
 │   ├── news.js       # Aggregate + normalize free RSS feeds → JSON (edge-cached)
 │   ├── search.js     # Full-text search over all the news (Google News search feed)
+│   ├── ai.js         # Assistant — streams an open-weights model, key stays server-side
 │   └── wiki.js       # Wikipedia "On this day" events
 ├── public/
 │   ├── index.html    # App shell
-│   ├── styles.css    # Design system
+│   ├── theme.js      # Palette boot — render-blocking, sets dark/light before paint
+│   ├── styles.css    # Design system (both themes, one token block)
 │   ├── app.js        # Rendering, search, self-refresh, PWA install
+│   ├── assistant.js  # Assistant UI + on-device extractive fallback
 │   ├── embed.js      # On-device semantic engine (WordPiece + static vectors)
 │   ├── models/potion # Quantised embedding table — built by scripts/make-embedding-model.mjs
 │   ├── sw.js         # Service worker (offline app shell)
@@ -128,9 +154,41 @@ meridian/
 | `GET` | `/api/search?q=<query>` | Full-text search across all the news (Google News' keyless search feed), normalized and same-story clustered like the main feed. |
 | `GET` | `/api/wiki` | Notable historical events for the current date. |
 | `GET` | `/api/markets` | World indices, crypto & commodities (delayed quotes). |
+| `GET` | `/api/ai` | Capability probe — `{ available, model }`. Never returns the key. |
+| `POST` | `/api/ai` | Assistant. Body: `{ mode, question, article, headlines, topics, edition, history }` where `mode` is `ask`\|`summarize`\|`explain`\|`brief`. Streams the answer as plain text. |
 
-Both return JSON and are cached at the edge (`s-maxage`) so upstream sources are
-never hammered.
+These return JSON and are cached at the edge (`s-maxage`) so upstream sources are
+never hammered. `/api/ai` is the exception: `no-store`, and streamed.
+
+## Assistant setup
+
+The assistant is optional. Without configuration the route answers `503
+ai-unconfigured` and the client falls back to extractive summarising on the
+device — worse prose, same facts, works offline. To enable the generative path,
+set one environment variable in the Vercel project (Settings → Environment
+Variables) or in `.env.local` for `vercel dev`:
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `AI_API_KEY` | yes | — | Provider key. Never sent to the browser. |
+| `AI_BASE_URL` | no | `https://api.groq.com/openai/v1` | Any OpenAI-compatible endpoint. |
+| `AI_MODEL` | no | `llama-3.3-70b-versatile` | Open weights by default. |
+
+Groq is the default because its free tier serves Llama 3.3 70B without a credit
+card (roughly 30 requests/minute, 14,400/day at the time of writing) and its
+latency suits streaming. Nothing about the route is Groq-specific — Cerebras,
+Together, OpenRouter or a local vLLM work by changing `AI_BASE_URL` and
+`AI_MODEL`.
+
+Two things worth knowing about the design:
+
+- **The key never reaches the client.** The browser only ever calls
+  `/api/ai` on its own origin, which is what lets the page keep
+  `connect-src 'self'` in its CSP.
+- **Third-party article text is fenced.** Story bodies come from arbitrary news
+  pages, so they are wrapped in explicit markers and the system prompt tells the
+  model that anything inside them is data to analyse, never instructions to
+  follow.
 
 ## Run locally
 

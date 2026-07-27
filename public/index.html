@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- `dark` is the no-JS fallback and the pre-boot default; theme.js rewrites it
+     from the stored choice before the stylesheet paints. -->
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -31,6 +33,9 @@
   <link rel="apple-touch-icon" href="/icons/icon.svg" />
 
   <link rel="preload" href="/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <!-- Render-blocking on purpose and kept tiny: it stamps the palette class on
+       <html> so the first paint is already the right theme. -->
+  <script src="/theme.js"></script>
   <link rel="stylesheet" href="/styles.css" />
 
   <script type="application/ld+json">
@@ -94,6 +99,11 @@
       <form class="search" id="search" role="search">
         <input id="search-input" type="search" placeholder="Search stories, tickers, sections…" aria-label="Search stories, tickers, sections" autocomplete="off" />
       </form>
+      <button class="icon-btn" id="ai-btn" aria-label="Ask the assistant" title="Ask about the news on your screen" aria-controls="ai-panel" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+          <path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z"/><circle cx="19" cy="4.5" r="1.4"/>
+        </svg>
+      </button>
       <button class="icon-btn" id="settings-btn" aria-label="Settings" title="Settings">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.56 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1z"/>
@@ -250,6 +260,13 @@
       </form>
     </div>
     <div class="set-group">
+      <div class="set-label">Appearance</div>
+      <div class="seg" id="set-theme">
+        <button data-v="dark" class="on">Dark</button><button data-v="light">Light</button><button data-v="system">System</button>
+      </div>
+      <p class="set-note" id="theme-note">Dark is Meridian's default canvas. System follows your device, switching with it.</p>
+    </div>
+    <div class="set-group">
       <div class="set-label">Text size</div>
       <div class="seg" id="set-text">
         <button data-v="s">Small</button><button data-v="m" class="on">Medium</button><button data-v="l">Large</button>
@@ -314,6 +331,7 @@
   <script src="/embed.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/features.js" defer></script>
+  <script src="/assistant.js" defer></script>
   <!-- Vercel Web Analytics (free) — activates once enabled in the dashboard -->
   <script defer src="/_vercel/insights/script.js"></script>
 </body>

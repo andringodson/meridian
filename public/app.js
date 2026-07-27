@@ -1457,7 +1457,8 @@ function renderReaderShell(a) {
           <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M8 7h9v9"/></svg></a>
         <button class="reader-act reader-save${saved ? ' on' : ''}" aria-label="Save story"><svg viewBox="0 0 24 24" width="15" height="15" fill="${saved ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span>${saved ? 'Saved' : 'Save'}</span></button>
         <button class="reader-act reader-share" aria-label="Share story"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.7l6.8-4.4M8.6 13.3l6.8 4.4"/></svg><span>Share</span></button>
-        <button class="reader-act reader-sum" hidden aria-label="Summarize story with on-device AI"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z"/><circle cx="19" cy="4.5" r="1.4"/></svg><span>Summarize</span></button>
+        <button class="reader-act reader-sum" hidden aria-label="Summarize this story"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z"/><circle cx="19" cy="4.5" r="1.4"/></svg><span>Summarize</span></button>
+        <button class="reader-act reader-ask" hidden aria-label="Ask the assistant about this story"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-8.8A8.4 8.4 0 1 1 21 11.5z"/><path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.4-2.8 2.4"/><path d="M12 16.2h.01"/></svg><span>Ask</span></button>
       </div>
       ${coverageHTML(a)}
       <div class="reader-body" id="reader-body">
@@ -1470,14 +1471,27 @@ function renderReaderShell(a) {
   readerParas = [];
 }
 
-/* ---------- on-device AI summary (Chrome built-in Summarizer / Gemini Nano) ----------
-   Free, keyless, and private: the summary is generated on the user's machine.
-   Progressive enhancement only — the button never appears without the API. */
+/* ---------- summarise the open story ----------
+   Two engines, preferred in this order:
+
+   1. Chrome's built-in Summarizer (Gemini Nano). Keyless, private and offline —
+      the text never leaves the machine — so where it exists it wins outright.
+   2. Otherwise the assistant panel, which reaches the server model and, failing
+      that, extracts on-device (see assistant.js).
+
+   The button is therefore always offered now; only the engine behind it varies. */
 let aiSummarizer = null;
 async function summarizeStory(btn) {
   const body = $('#reader-body', reader);
   const span = btn.querySelector('span');
-  if (!body || !readerParas.length || !('Summarizer' in self)) return;
+  if (!body || !readerParas.length) return;
+
+  // No built-in summariser — hand the same story to the assistant instead.
+  if (!('Summarizer' in self)) {
+    if (typeof Assistant !== 'undefined') Assistant.run({ mode: 'summarize' }, 'Summarise this story');
+    else toast('Summaries aren’t available here');
+    return;
+  }
   const existing = $('.reader-summary', reader);
   if (existing) { existing.remove(); btn.classList.remove('on'); span.textContent = 'Summarize'; return; }
   btn.disabled = true;
@@ -1581,8 +1595,11 @@ async function showReader(index) {
     if (d && d.ok && d.paragraphs && d.paragraphs.length) {
       body.innerHTML = d.paragraphs.map((p) => `<p>${esc(p)}</p>`).join('') + linkOut(a, d.site);
       readerParas = d.paragraphs;
-      // Chrome's built-in Summarizer (Gemini Nano) — offered only where it exists.
-      if ('Summarizer' in self) { const b = $('.reader-sum', reader); if (b) b.hidden = false; }
+      // There is now always an engine behind these — Chrome's built-in
+      // summariser, the server model, or on-device extraction.
+      for (const sel of ['.reader-sum', '.reader-ask']) {
+        const b = $(sel, reader); if (b) b.hidden = false;
+      }
     } else {
       const s = $('.reader-status', body);
       if (s) s.outerHTML = linkOut(a);
@@ -1691,6 +1708,11 @@ reader.addEventListener('click', (e) => {
   }
   const sum = e.target.closest('.reader-sum');
   if (sum) { summarizeStory(sum); return; }
+  if (e.target.closest('.reader-ask')) {
+    // Opens the panel already reading this story; no question sent yet.
+    if (typeof Assistant !== 'undefined') Assistant.open();
+    return;
+  }
   const a = readerList[readerIndex];
   if (!a) return;
   const save = e.target.closest('.reader-save');
@@ -1786,9 +1808,85 @@ refreshBtn?.addEventListener('click', async () => {
   setTimeout(() => refreshBtn.classList.remove('spinning'), 400);
 });
 
-/* back-to-top */
+/* ---------- sticky stack + retracting tab rail ----------
+   Two jobs, one scroll listener, one rAF per frame.
+
+   (1) Publish the real heights of the topbar, ticker and tab rail as custom
+   properties. Every sticky offset in the sheet is expressed against them, so a
+   taller ticker (a second line of quotes on a narrow phone) can't leave the
+   tabs overlapping it the way the old hand-counted 61/96/130px did.
+
+   (2) Retract the tab rail while the reader is moving down the page and put it
+   back on any upward movement. The guards matter more than the rule: nothing
+   happens in the first screenful (where the rail is the primary navigation),
+   sub-threshold jitter is ignored so a trackpad's noise can't flicker it, and
+   an overscroll bounce past either end reports a direction the reader didn't
+   ask for, so both ends are pinned open. */
 const toTop = $('#to-top');
-addEventListener('scroll', () => { toTop.hidden = scrollY < 600; }, { passive: true });
+const tabsEl = $('#tabs');
+
+(() => {
+  const root = document.documentElement;
+  const topbarEl = $('.topbar');
+  const tickerEl = $('#ticker');
+
+  const measure = () => {
+    const set = (name, el) => {
+      if (!el) return;
+      const h = Math.round(el.getBoundingClientRect().height);
+      if (h) root.style.setProperty(name, `${h}px`);
+    };
+    set('--topbar-h', topbarEl);
+    set('--ticker-h', tickerEl);
+    // The rail is transformed while retracted; its height is unaffected, but
+    // read it while it is open so the value is never a collapsed 0.
+    if (tabsEl && !root.classList.contains('chrome-hidden')) set('--tabs-h', tabsEl);
+  };
+  measure();
+  addEventListener('resize', measure, { passive: true });
+  if ('ResizeObserver' in self && tickerEl) new ResizeObserver(measure).observe(tickerEl);
+  // Webfont swap reflows the bars after first paint.
+  document.fonts?.ready.then(measure).catch(() => { /* no font API */ });
+
+  const REVEAL_AT = 220;   // px — above this the rail is always open
+  const DELTA = 6;         // px — smaller moves are noise, not intent
+  let last = scrollY;
+  let ticking = false;
+
+  const onFrame = () => {
+    ticking = false;
+    const y = scrollY;
+    const max = document.documentElement.scrollHeight - innerHeight;
+    const diff = y - last;
+
+    toTop.hidden = y < 600;
+
+    // Rubber-band overscroll at either end moves the page without the reader
+    // asking for a direction — treat both as "open".
+    if (y <= REVEAL_AT || y >= max - 2) {
+      root.classList.remove('chrome-hidden');
+      last = y;
+      return;
+    }
+    if (Math.abs(diff) < DELTA) return;   // keep `last` — let small moves accumulate
+    root.classList.toggle('chrome-hidden', diff > 0);
+    last = y;
+  };
+
+  addEventListener('scroll', () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(onFrame);
+  }, { passive: true });
+
+  // Switching category re-enters the rail's own context: show it and start the
+  // direction test from wherever that click left the page.
+  tabsEl?.addEventListener('click', () => {
+    root.classList.remove('chrome-hidden');
+    last = scrollY;
+  });
+})();
+
 toTop?.addEventListener('click', () => scrollTo({ top: 0, behavior: 'smooth' }));
 
 /* boot — PWA shortcut URL params win, then the "open at launch" preference */
