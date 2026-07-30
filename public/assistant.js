@@ -251,6 +251,7 @@ const Assistant = (() => {
           question: payload.question || '',
           article: story,
           cluster: payload.cluster || undefined,
+          provenance: payload.provenance || undefined,
           headlines: (story || payload.cluster) ? [] : feedHeadlines(),
           topics: topics(),
           edition: edition(),
@@ -373,9 +374,9 @@ const Assistant = (() => {
         const lead = extract(c.text, 1)[0] || (c.title || '').trim();
         return `- **${c.source}**${prov ? ` (${prov})` : ''} — ${lead}`;
       });
-      out.innerHTML = render(
-        `${payload.cluster.length} outlets, each opening the story its own way:\n${lines.join('\n')}`
-      ) + note;
+      const head = `${payload.cluster.length} outlets, each opening the story its own way:`;
+      const tail = payload.provenance ? `\n\n${payload.provenance}` : '';
+      out.innerHTML = render(`${head}\n${lines.join('\n')}${tail}`) + note;
       finish();
       return;
     }
@@ -462,10 +463,11 @@ const Assistant = (() => {
     ask(payload, label);
   }
 
-  /* Hand in accounts of one event from several newsrooms; app.js gathers them. */
-  function compare(cluster) {
+  /* Hand in accounts of one event from several newsrooms; app.js gathers them,
+     along with a reading of how concentrated that set of newsrooms is. */
+  function compare(cluster, provenance) {
     if (!Array.isArray(cluster) || cluster.length < 2) return;
-    run({ mode: 'compare', cluster },
+    run({ mode: 'compare', cluster, provenance: provenance?.text || '' },
       `Compare how ${cluster.length} outlets are covering this`);
   }
 

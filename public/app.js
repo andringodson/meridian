@@ -240,6 +240,45 @@ const COUNTRY_TEXT = {
 };
 const pubOf = (o) => (o && o.publisher && publisherMeta[o.publisher]) || null;
 
+/* ---------- how concentrated is this coverage? ----------
+   Deliberately not a lean rating — see the note atop api/_publishers.js, which
+   rules those out as someone else's political judgement. This asks a question
+   the public record can actually answer: are the newsrooms carrying this story
+   varied, or are they all the same kind of newsroom in the same country?
+
+   The honesty constraint is that plenty of sources have no provenance on file.
+   A claim about "all five outlets" is false when two of them are unplaceable,
+   so the count is always of what is actually known, and the wording says so. */
+function provenanceNote(spread) {
+  if (!spread) return null;
+  const total = spread.outlets.length;
+  const known = spread.outlets.map(pubOf).filter(Boolean);
+  if (known.length < 3) return null;          // too few to call a pattern
+
+  const countries = [...new Set(known.map((p) => p.country).filter(Boolean))];
+  const funds = [...new Set(known.map((p) => p.ownership).filter(Boolean))];
+  if (!countries.length || !funds.length) return null;
+
+  const all = known.length === total;
+  const subject = all ? `All ${total}` : `${known.length} of these ${total}`;
+  const place = COUNTRY_TEXT[countries[0]] || countries[0];
+  const fund = OWNERSHIP_TEXT[funds[0]] || funds[0];
+
+  if (countries.length === 1 && funds.length === 1) {
+    return { level: 'narrow', text: `${subject} outlets are ${place} ${fund} newsrooms — one vantage point.` };
+  }
+  if (countries.length === 1) {
+    return { level: 'narrow', text: `${subject} outlets are based in the ${place}, though funded differently.` };
+  }
+  if (funds.length === 1) {
+    return { level: 'narrow', text: `${subject} outlets are ${fund} newsrooms, across ${countries.length} countries.` };
+  }
+  return {
+    level: 'broad',
+    text: `${subject} outlets span ${countries.length} countries and ${funds.length} funding models.`,
+  };
+}
+
 /* Everyone carrying a story, the lead outlet included, in one list. */
 function coverageSpread(a) {
   if (!a) return null;
@@ -1489,6 +1528,10 @@ function coverageHTML(a) {
       <button class="cov-compare" aria-label="Compare how these outlets cover the story">Compare accounts</button>
     </div>
     <div class="cov-chips">${chips}</div>
+    ${(() => {
+      const note = provenanceNote(spread);
+      return note ? `<p class="cov-note cov-${note.level}">${esc(note.text)}</p>` : '';
+    })()}
   </div>`;
 }
 
@@ -1650,7 +1693,9 @@ async function compareCoverage() {
       toast('Couldn’t read enough of these outlets to compare');
       return;
     }
-    Assistant.compare(cluster);
+    // The concentration reading is a fact about the set, not about any one
+    // account, so it travels alongside rather than inside the cluster.
+    Assistant.compare(cluster, provenanceNote(spread));
   } catch {
     toast('Comparison failed — try again');
   } finally {

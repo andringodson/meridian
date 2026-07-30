@@ -147,7 +147,13 @@ function buildMessages(body) {
       })
       .filter(Boolean);
     if (accounts.length > 1) {
-      parts.push(`Accounts of the same event from ${accounts.length} newsrooms:\n\n${accounts.join('\n\n')}`);
+      // A fact about the set, computed from public-record provenance rather
+      // than inferred by the model — which must not extrapolate a slant from it.
+      const prov = str(body.provenance, 200);
+      const preface = prov
+        ? `Provenance of this set, for context only — do not infer a political slant from it: ${prov}\n\n`
+        : '';
+      parts.push(`${preface}Accounts of the same event from ${accounts.length} newsrooms:\n\n${accounts.join('\n\n')}`);
     }
   }
 
