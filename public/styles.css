@@ -1137,6 +1137,53 @@ html.morphing .reader-panel, html.morphing .reader-backdrop { animation: none; }
 }
 .set-btn:hover { color: var(--text); border-color: var(--accent); }
 
+/* ---------- command palette (⌘K) ---------- */
+.cp { position: fixed; inset: 0; z-index: 190; display: flex; justify-content: center; }
+.cp[hidden] { display: none; }
+.cp-backdrop {
+  position: absolute; inset: 0; background: var(--scrim);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  animation: cp-fade .14s ease both;
+}
+@keyframes cp-fade { from { opacity: 0; } to { opacity: 1; } }
+.cp-box {
+  position: relative; z-index: 1;
+  margin-top: min(14vh, 110px); width: min(560px, calc(100vw - 24px)); align-self: flex-start;
+  background: var(--elev); border: 1px solid var(--border-2); border-radius: 14px;
+  overflow: hidden; display: flex; flex-direction: column;
+  animation: cp-in .16s cubic-bezier(.2, .7, .2, 1) both;
+}
+@keyframes cp-in { from { opacity: 0; transform: translateY(-8px) scale(.99); } to { opacity: 1; transform: none; } }
+#cp-input {
+  background: none; border: 0; border-bottom: 1px solid var(--border);
+  color: var(--text); font: 15px var(--body); padding: 15px 18px; outline: none;
+}
+#cp-input::placeholder { color: var(--text-2); }
+.cp-list { max-height: min(46vh, 380px); overflow-y: auto; padding: 6px; scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+.cp-item {
+  display: flex; align-items: baseline; gap: 11px; width: 100%; text-align: left;
+  background: none; border: 0; border-radius: 8px; color: var(--text);
+  padding: 9px 11px; cursor: pointer; font: 13.5px var(--body);
+}
+.cp-item.active { background: var(--surface-2); }
+.cp-group {
+  flex: 0 0 auto; min-width: 62px;
+  font: 700 9.5px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--accent-hi);
+}
+.cp-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-label mark { background: none; color: var(--accent-hi); font-weight: 600; }
+.cp-hint { flex: none; font-size: 10.5px; color: var(--text-2); letter-spacing: .04em; text-transform: uppercase; }
+.cp-empty { padding: 18px 14px; color: var(--text-2); font-size: 13px; }
+.cp-foot {
+  border-top: 1px solid var(--border); padding: 8px 14px;
+  font-size: 10.5px; color: var(--text-2); display: flex; gap: 5px; align-items: center;
+}
+.cp-foot kbd {
+  font: 600 10px var(--display); border: 1px solid var(--border); border-radius: 4px;
+  padding: 1px 5px; color: var(--text-2);
+}
+@media (max-width: 700px) { .cp-box { margin-top: 8vh; } .cp-foot { display: none; } }
+
 /* ---------- read aloud ----------
    Two ranges are painted while a story is spoken: the paragraph in hand, and
    the word being said. `::highlight()` accepts only a short list of properties
