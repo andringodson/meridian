@@ -66,6 +66,9 @@
   --tint: rgba(0, 0, 238, 0.16);
   --tint-2: rgba(0, 0, 238, 0.2);
   --tint-soft: rgba(0, 0, 238, 0.08);
+  /* Pointer spotlight. On black an actual light reads as one; a brand tint just
+     looks like another gradient against the fluid backdrop. */
+  --spot: rgba(255, 255, 255, 0.10);
   --glow: rgba(0, 0, 238, 0.45);
   --prose: #e6e6e6;        /* long-form reader body */
   --star-off: #3a3a3a;
@@ -126,6 +129,8 @@
   --tint: rgba(0, 0, 214, 0.09);
   --tint-2: rgba(0, 0, 214, 0.12);
   --tint-soft: rgba(0, 0, 214, 0.06);
+  /* A white wash on white paper is nothing — light mode tints instead. */
+  --spot: rgba(0, 0, 214, 0.07);
   --glow: rgba(0, 0, 214, 0.28);
   --prose: #1b1b1f;
   --star-off: #c3c3ca;
@@ -1122,6 +1127,66 @@ html.morphing .reader-panel, html.morphing .reader-backdrop { animation: none; }
   transition: color .15s, border-color .15s;
 }
 .set-btn:hover { color: var(--text); border-color: var(--accent); }
+
+/* ---------- read aloud ----------
+   Two ranges are painted while a story is spoken: the paragraph in hand, and
+   the word being said. `::highlight()` accepts only a short list of properties
+   (colour, background, decoration, shadow), which is exactly why it is the
+   right tool — it cannot reflow the article no matter what it paints. */
+::highlight(ra-para) {
+  background-color: var(--tint);
+}
+::highlight(ra-word) {
+  background-color: var(--accent);
+  color: var(--on-accent);
+}
+/* The paragraph marker is a rule in the margin — always drawn, so the place is
+   never lost even where the Highlight API is missing and the wash above never
+   paints. A box-shadow rather than a border, so no text shifts when it appears. */
+#reader-body p.ra-on {
+  box-shadow: -10px 0 0 -8px var(--accent);
+}
+.reader-listen.on { color: var(--text); border-color: var(--accent); background: var(--tint-soft); }
+.reader-rate { font-variant-numeric: tabular-nums; min-width: 52px; justify-content: center; }
+.reader-rate[hidden] { display: none; }
+
+/* ---------- pointer response ----------
+   pointer.js writes --mx/--my on the hovered card and a transform on nearby
+   controls. Both are compositor-only; neither touches layout. */
+.card, .vcard, .mkt-card {
+  --mx: 50%; --my: 50%;
+  position: relative;          /* .card already is; the other two need it */
+}
+.card::after, .vcard::after, .mkt-card::after {
+  content: ''; position: absolute; inset: 0; z-index: 1;
+  pointer-events: none; opacity: 0;
+  border-radius: inherit;
+  background: radial-gradient(420px circle at var(--mx) var(--my), var(--spot), transparent 66%);
+  transition: opacity .28s ease;
+}
+/* The wash lights the card's surface, so it belongs under the content. Card
+   children are unpositioned and would otherwise paint below a positioned
+   ::after however low its z-index — hence lifting them rather than sinking it
+   (z-index:-1 would drop it behind the card's own background and vanish). */
+.card > *, .vcard > *, .mkt-card > * { position: relative; z-index: 2; }
+.card.lit::after, .vcard.lit::after, .mkt-card.lit::after { opacity: 1; }
+/* The hero card paints its own gradient scrim over the picture; a second wash
+   on top of it muddies the headline. */
+.card.lead.has-img::after { display: none; }
+
+/* Magnetic controls spring back when the pointer leaves — pointer.js clears the
+   inline transform and this carries it home. */
+.icon-btn, .to-top, .ai-send, .bn-item, .wx {
+  transition: transform .34s cubic-bezier(.22, 1, .36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card::after, .vcard::after, .mkt-card::after { display: none; }
+  .icon-btn, .to-top, .ai-send, .bn-item, .wx { transition: none; }
+}
+.reduce-motion .card::after,
+.reduce-motion .vcard::after,
+.reduce-motion .mkt-card::after { display: none; }
 
 /* ---------- news assistant ----------
    A docked column on the desktop and a sheet on a phone. Deliberately not a

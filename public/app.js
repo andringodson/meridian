@@ -1458,6 +1458,8 @@ function renderReaderShell(a) {
         <button class="reader-act reader-save${saved ? ' on' : ''}" aria-label="Save story"><svg viewBox="0 0 24 24" width="15" height="15" fill="${saved ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span>${saved ? 'Saved' : 'Save'}</span></button>
         <button class="reader-act reader-share" aria-label="Share story"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.7l6.8-4.4M8.6 13.3l6.8 4.4"/></svg><span>Share</span></button>
         <button class="reader-act reader-sum" hidden aria-label="Summarize this story"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z"/><circle cx="19" cy="4.5" r="1.4"/></svg><span>Summarize</span></button>
+        <button class="reader-act reader-listen" hidden aria-label="Read this story aloud" aria-pressed="false"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Listen</span></button>
+        <button class="reader-act reader-rate" hidden aria-label="Change reading speed" title="Reading speed"><span>1×</span></button>
         <button class="reader-act reader-ask" hidden aria-label="Ask the assistant about this story"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-8.8A8.4 8.4 0 1 1 21 11.5z"/><path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.4-2.8 2.4"/><path d="M12 16.2h.01"/></svg><span>Ask</span></button>
       </div>
       ${coverageHTML(a)}
@@ -1566,6 +1568,8 @@ function swapReaderHero(src, a) {
 async function showReader(index) {
   const a = readerList[index];
   if (!a) return;
+  // prev/next walks to a different story — stop reading the previous one.
+  if (typeof ReadAloud !== 'undefined') ReadAloud.stop();
   readerIndex = index;
   const token = ++readToken;
   updateReaderNav();
@@ -1599,6 +1603,10 @@ async function showReader(index) {
       // summariser, the server model, or on-device extraction.
       for (const sel of ['.reader-sum', '.reader-ask']) {
         const b = $(sel, reader); if (b) b.hidden = false;
+      }
+      // Read-aloud needs the extracted paragraphs, so it appears with them.
+      if (typeof ReadAloud !== 'undefined' && ReadAloud.supported) {
+        const b = $('.reader-listen', reader); if (b) b.hidden = false;
       }
     } else {
       const s = $('.reader-status', body);
@@ -1670,6 +1678,8 @@ function closeReader() {
 
 function dismissReader() {
   if (reader.hidden) return;
+  // Nothing should still be reading a story that is no longer on screen.
+  if (typeof ReadAloud !== 'undefined') ReadAloud.stop();
   const a = readerList[readerIndex];
   const card = a && feedEl.querySelector(`.card[href="${CSS.escape(a.link)}"]`);
   const hide = () => {
@@ -1708,6 +1718,8 @@ reader.addEventListener('click', (e) => {
   }
   const sum = e.target.closest('.reader-sum');
   if (sum) { summarizeStory(sum); return; }
+  if (e.target.closest('.reader-listen')) { ReadAloud.toggle(); return; }
+  if (e.target.closest('.reader-rate')) { ReadAloud.cycleRate(); return; }
   if (e.target.closest('.reader-ask')) {
     // Opens the panel already reading this story; no question sent yet.
     if (typeof Assistant !== 'undefined') Assistant.open();
