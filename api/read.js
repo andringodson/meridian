@@ -140,6 +140,10 @@ export async function extractPage(url) {
       url: finalUrl,
       site: meta(html, 'og:site_name') || host,
       title: meta(html, 'og:title', 'twitter:title'),
+      // The page's own standfirst. Worth having even though `paragraphs` exists:
+      // the first extracted paragraph is often a byline and a timestamp glued
+      // together, while og:description is written to be read on its own.
+      description: meta(html, 'og:description', 'twitter:description', 'description'),
       image,
       author,
       published: meta(html, 'article:published_time', 'og:article:published_time', 'article:modified_time'),

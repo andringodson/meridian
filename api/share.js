@@ -116,8 +116,13 @@ export default async function handler(req, res) {
   }
 
   const title = clip(data?.title || hint || 'A story on Meridian', LIMITS.title);
+  /* The page's own standfirst first. A first extracted paragraph is frequently
+     a byline and a timestamp run together — "Senior football correspondent
+     Published 30 July 2026 BST Updated Just now…" — which is precisely what a
+     link preview should not lead with. */
   const description = clip(
-    data?.paragraphs?.[0] || 'Read this story in Meridian — world news, markets and history from open sources.',
+    data?.description || data?.paragraphs?.[0] ||
+      'Read this story in Meridian — world news, markets and history from open sources.',
     LIMITS.description
   );
   const image = safeImage(data?.image);
