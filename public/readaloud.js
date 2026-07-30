@@ -24,6 +24,62 @@ const ReadAloud = (() => {
 
   const RATES = [1, 1.25, 1.5, 0.85];
 
+  /* ---------- voices ----------
+     The platform usually already has a good voice installed and Meridian was
+     never asking for it — `speechSynthesis.speak()` with no `voice` set takes
+     the system default, which on most machines is the oldest, flattest one
+     available. Choosing deliberately costs nothing and is the single biggest
+     improvement available to the spoken story without downloading a model.
+
+     Names are the only quality signal the API exposes; there is no "is this
+     neural" flag. These substrings are what the good voices actually call
+     themselves across Chrome, Edge, macOS and Android. */
+  const GOOD = /natural|neural|premium|enhanced|siri|google|wavenet|journey|studio/i;
+  const VOICE_KEY = 'meridian-settings';
+
+  let voiceList = [];
+
+  const uiLang = () => (navigator.language || 'en-US').toLowerCase();
+
+  function loadVoices() {
+    let all = [];
+    try { all = speechSynthesis.getVoices() || []; } catch { all = []; }
+    const base = uiLang().split('-')[0];
+    // Same language first, then everything else — a reader who wants a foreign
+    // voice can still pick one, but should not have to wade to their own.
+    const mine = all.filter((v) => (v.lang || '').toLowerCase().startsWith(base));
+    const rest = all.filter((v) => !(v.lang || '').toLowerCase().startsWith(base));
+    const rank = (v) => (GOOD.test(v.name) ? 0 : 1);
+    voiceList = [...mine.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)), ...rest];
+    return voiceList;
+  }
+
+  function storedVoiceURI() {
+    try { return (JSON.parse(localStorage.getItem(VOICE_KEY)) || {}).voiceURI || ''; }
+    catch { return ''; }
+  }
+
+  /* The stored choice, else the best-looking voice in the reader's own
+     language, else whatever the platform wants to do. */
+  function pickVoice() {
+    if (!voiceList.length) loadVoices();
+    const want = storedVoiceURI();
+    if (want) {
+      const hit = voiceList.find((v) => v.voiceURI === want);
+      if (hit) return hit;
+    }
+    const base = uiLang().split('-')[0];
+    return voiceList.find((v) => (v.lang || '').toLowerCase().startsWith(base) && GOOD.test(v.name))
+      || voiceList.find((v) => (v.lang || '').toLowerCase().startsWith(base))
+      || null;
+  }
+
+  // Chrome populates the list asynchronously, so the first call is usually empty.
+  if (SUPPORTED) {
+    loadVoices();
+    try { speechSynthesis.addEventListener('voiceschanged', loadVoices); } catch { /* older engines */ }
+  }
+
   let paras = [];          // [{ el, text, node }]
   let idx = -1;            // paragraph being spoken
   let speaking = false;
@@ -141,6 +197,12 @@ const ReadAloud = (() => {
 
     const u = new SpeechSynthesisUtterance(paras[i].text);
     u.rate = rate;
+    // The `voice` setter is type-checked by the engine; a stale handle from a
+    // voice list that changed underneath us must not take the reading down.
+    try {
+      const v = pickVoice();
+      if (v) { u.voice = v; u.lang = v.lang; }
+    } catch { /* platform default is a fine outcome */ }
     u.onboundary = (e) => {
       if (e.name && e.name !== 'word') return;
       paintWord(i, e.charIndex, e.charLength);
@@ -209,6 +271,10 @@ const ReadAloud = (() => {
 
   return {
     toggle, stop, cycleRate,
+    // The briefing in features.js speaks through the same chosen voice, so the
+    // app never has two different narrators.
+    voices: loadVoices,
+    voice: pickVoice,
     get supported() { return SUPPORTED; },
     get speaking() { return speaking; },
   };

@@ -226,6 +226,7 @@ function openSheet() {
   $('#set-motion').checked = !!s.motion;
   const at = $('#set-autotranslate');
   if (at) at.checked = !!s.autoTranslate;
+  renderVoicePicker();
   const nBox = $('#set-notify');
   if (nBox) nBox.checked = !!s.notify && 'Notification' in window && Notification.permission === 'granted';
   sheetEl.hidden = false; backdropEl.hidden = false;
@@ -300,6 +301,33 @@ $('#topic-add')?.addEventListener('submit', (e) => {
     load('/palette.js').then(() => self.Palette?.show()).catch(() => { /* enhancement only */ });
   });
 })();
+
+/* ---------- voice picker ----------
+   The list arrives asynchronously in Chrome, so the group is populated on every
+   open of the sheet rather than once at boot. Hidden entirely where the browser
+   offers nothing to choose between. */
+function renderVoicePicker() {
+  const group = $('#set-voice-group');
+  const sel = $('#set-voice');
+  if (!group || !sel || typeof ReadAloud === 'undefined' || !ReadAloud.supported) return;
+
+  const list = ReadAloud.voices();
+  if (list.length < 2) { group.hidden = true; return; }
+
+  const current = ReadAloud.voice();
+  const GOOD = /natural|neural|premium|enhanced|siri|google|wavenet|journey|studio/i;
+  sel.innerHTML = list.slice(0, 60).map((v) => {
+    const star = GOOD.test(v.name) ? '★ ' : '';
+    const on = current && v.voiceURI === current.voiceURI ? ' selected' : '';
+    return `<option value="${esc(v.voiceURI)}"${on}>${esc(star + v.name)} — ${esc(v.lang)}</option>`;
+  }).join('');
+  group.hidden = false;
+}
+$('#set-voice')?.addEventListener('change', (e) => {
+  saveSettings({ voiceURI: e.target.value });
+  const name = e.target.options[e.target.selectedIndex]?.text.replace(/^★ /, '').split(' — ')[0];
+  toast(`Voice: ${name}`);
+});
 
 /* ---------- translation ----------
    The whole group is hidden where the browser has no built-in translator: an
@@ -629,6 +657,11 @@ searchInput?.addEventListener('blur', () => setTimeout(hideSdrop, 150));
       const item = queue[qi++];
       const u = new SpeechSynthesisUtterance(item.text);
       u.rate = 1.03;
+      // Same narrator as the reader — one chosen voice across the whole app.
+      try {
+        const v = typeof ReadAloud !== 'undefined' ? ReadAloud.voice() : null;
+        if (v) { u.voice = v; u.lang = v.lang; }
+      } catch { /* platform default */ }
       u.onstart = () => highlight(item.link);
       u.onend = next;
       u.onerror = stopListen;
