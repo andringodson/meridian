@@ -76,6 +76,21 @@ connection at all.
   route, so no key ever reaches the browser and the page keeps `connect-src
   'self'`. With no key configured it degrades to on-device extractive
   summarising instead of disappearing. See [Assistant setup](#assistant-setup).
+- **Read aloud, word by word** — the reader speaks a story and highlights each
+  word as it reaches it, using `boundary` events mapped onto ranges and painted
+  with the CSS Custom Highlight API, so the article's DOM is never touched while
+  it reads. Speed control, a margin marker for the current paragraph, and no
+  download: it is the platform's own voice.
+- **Compare the accounts** — Meridian already knows which outlets carry the same
+  story. *Compare accounts* pulls each newsroom's own text and sets out what
+  they agree on, where they diverge in fact or framing, and what only one outlet
+  reports — attributed by name, with no verdict on who is right. Without a model
+  configured it still lays each outlet's opening line side by side with its
+  country and funding.
+- **Translate in place** — where the browser ships Chrome's built-in
+  `LanguageDetector` and `Translator`, a foreign-language story can be read in
+  your own, translated locally with nothing sent anywhere. Offered only when
+  detection is confident and the exact pair is supported.
 - **Dark and light** — the black canvas is still the default and still the brand,
   but Settings → Appearance offers Light and System. Every colour resolves
   through a token, and the light greys are re-picked against white rather than
@@ -134,6 +149,9 @@ meridian/
 │   ├── styles.css    # Design system (both themes, one token block)
 │   ├── app.js        # Rendering, search, self-refresh, PWA install
 │   ├── assistant.js  # Assistant UI + on-device extractive fallback
+│   ├── readaloud.js  # Spoken stories with word-level highlighting
+│   ├── translate.js  # On-device translation (Chrome built-in AI)
+│   ├── pointer.js    # Magnetic controls + card spotlight
 │   ├── embed.js      # On-device semantic engine (WordPiece + static vectors)
 │   ├── models/potion # Quantised embedding table — built by scripts/make-embedding-model.mjs
 │   ├── sw.js         # Service worker (offline app shell)
@@ -155,7 +173,7 @@ meridian/
 | `GET` | `/api/wiki` | Notable historical events for the current date. |
 | `GET` | `/api/markets` | World indices, crypto & commodities (delayed quotes). |
 | `GET` | `/api/ai` | Capability probe — `{ available, model }`. Never returns the key. |
-| `POST` | `/api/ai` | Assistant. Body: `{ mode, question, article, headlines, topics, edition, history }` where `mode` is `ask`\|`summarize`\|`explain`\|`brief`. Streams the answer as plain text. |
+| `POST` | `/api/ai` | Assistant. Body: `{ mode, question, article, cluster, headlines, topics, edition, history }` where `mode` is `ask`\|`summarize`\|`explain`\|`brief`\|`compare`. Streams the answer as plain text. |
 
 These return JSON and are cached at the edge (`s-maxage`) so upstream sources are
 never hammered. `/api/ai` is the exception: `no-store`, and streamed.

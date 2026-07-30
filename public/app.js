@@ -1407,6 +1407,7 @@ function coverageHTML(a) {
     <div class="cov-head">
       <span class="cov-label">Coverage</span>
       <span class="cov-sum">${esc(bits.join(' · '))}${mix.length ? ` — ${esc(mix.join(', '))}` : ''}</span>
+      <button class="cov-compare" aria-label="Compare how these outlets cover the story">Compare accounts</button>
     </div>
     <div class="cov-chips">${chips}</div>
   </div>`;
@@ -1524,6 +1525,58 @@ async function summarizeStory(btn) {
   } finally {
     btn.disabled = false;
     if (span.textContent === 'Summarizing…') span.textContent = 'Summarize';
+  }
+}
+
+/* ---------- compare the accounts ----------
+   Pulls each outlet's own text for the story the reader has open and hands the
+   set to the assistant. The outlets are already known — /api/news folds
+   same-story items into one card with a `coverage` list — so this is a fan-out
+   over /api/read, which is edge-cached and mostly warm by the time it is asked.
+
+   Outlets whose page cannot be extracted are dropped rather than sent empty: an
+   account with no text would otherwise read to the model as an outlet with
+   nothing to say, which is a different claim entirely. */
+async function compareCoverage() {
+  const a = readerList[readerIndex];
+  const spread = coverageSpread(a);
+  const btn = $('.cov-compare', reader);
+  if (!spread || !btn || typeof Assistant === 'undefined') return;
+
+  btn.disabled = true;
+  const restore = btn.textContent;
+  btn.textContent = 'Reading outlets…';
+  const token = readToken;
+
+  try {
+    const picks = spread.outlets.slice(0, 5);
+    const settled = await Promise.allSettled(picks.map((o) => fetchRead(o.link)));
+    if (token !== readToken) return;         // reader moved on mid-fetch
+
+    const cluster = picks.map((o, i) => {
+      const r = settled[i];
+      const d = r.status === 'fulfilled' ? r.value : null;
+      const text = (d && d.ok && d.paragraphs?.length) ? d.paragraphs.join('\n\n') : '';
+      const p = pubOf(o);
+      return {
+        source: (p && p.name) || o.source,
+        country: p?.country || '',
+        ownership: p?.ownership || '',
+        title: (d && d.title) || (o.lead ? a.title : ''),
+        text,
+      };
+    }).filter((c) => c.text.length > 200);
+
+    if (cluster.length < 2) {
+      toast('Couldn’t read enough of these outlets to compare');
+      return;
+    }
+    Assistant.compare(cluster);
+  } catch {
+    toast('Comparison failed — try again');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = restore;
   }
 }
 
@@ -1725,6 +1778,7 @@ reader.addEventListener('click', (e) => {
   if (e.target.closest('.reader-listen')) { ReadAloud.toggle(); return; }
   if (e.target.closest('.reader-rate')) { ReadAloud.cycleRate(); return; }
   if (e.target.closest('.reader-translate')) { Translate.run(); return; }
+  if (e.target.closest('.cov-compare')) { compareCoverage(); return; }
   if (e.target.closest('.reader-ask')) {
     // Opens the panel already reading this story; no question sent yet.
     if (typeof Assistant !== 'undefined') Assistant.open();

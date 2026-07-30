@@ -223,7 +223,9 @@ const Assistant = (() => {
 
   async function ask(payload, label) {
     if (busy) return;
-    const story = openStory();
+    // A comparison carries its own material and must not also drag in the open
+    // story, or the lead outlet's text would be sent twice.
+    const story = payload.cluster ? null : openStory();
 
     bubble('user', render(label || payload.question || 'Summarise this'));
     inputEl.value = '';
@@ -248,7 +250,8 @@ const Assistant = (() => {
           mode: payload.mode || 'ask',
           question: payload.question || '',
           article: story,
-          headlines: story ? [] : feedHeadlines(),
+          cluster: payload.cluster || undefined,
+          headlines: (story || payload.cluster) ? [] : feedHeadlines(),
           topics: topics(),
           edition: edition(),
           history: history.slice(-MAX_HISTORY),
@@ -360,6 +363,23 @@ const Assistant = (() => {
     out.classList.remove('is-streaming');
     const note = '<p class="ai-note">Generated on your device — no model is configured for this deployment.</p>';
 
+    /* Without a model there is no reading of framing — but the provenance and
+       the outlets' own lead sentences are facts already in hand, and laying
+       them side by side is most of what "who is covering this" is asking. */
+    if (payload.cluster) {
+      const lines = payload.cluster.map((c) => {
+        const prov = [c.country && c.country.toUpperCase(), c.ownership && `${c.ownership}-funded`]
+          .filter(Boolean).join(', ');
+        const lead = extract(c.text, 1)[0] || (c.title || '').trim();
+        return `- **${c.source}**${prov ? ` (${prov})` : ''} — ${lead}`;
+      });
+      out.innerHTML = render(
+        `${payload.cluster.length} outlets, each opening the story its own way:\n${lines.join('\n')}`
+      ) + note;
+      finish();
+      return;
+    }
+
     if (story && story.text) {
       const points = extract(story.text, 4);
       out.innerHTML = points.length
@@ -442,7 +462,14 @@ const Assistant = (() => {
     ask(payload, label);
   }
 
+  /* Hand in accounts of one event from several newsrooms; app.js gathers them. */
+  function compare(cluster) {
+    if (!Array.isArray(cluster) || cluster.length < 2) return;
+    run({ mode: 'compare', cluster },
+      `Compare how ${cluster.length} outlets are covering this`);
+  }
+
   $('#ai-btn')?.addEventListener('click', toggle);
 
-  return { open: openPanel, close, toggle, run, probe };
+  return { open: openPanel, close, toggle, run, compare, probe };
 })();

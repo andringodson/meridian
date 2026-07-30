@@ -30,6 +30,8 @@ const LIMITS = {
   headlineChars: 180,
   history: 6,          // turns of prior conversation echoed back
   maxTokens: 900,
+  clusterOutlets: 5,   // accounts of one event compared side by side
+  clusterChars: 2600,  // per outlet — five of these already fills the context
 };
 
 /* ---------- rate limiting ----------
@@ -81,6 +83,16 @@ const MODES = {
   summarize: 'Summarise the story below in 3-5 short bullet points: what happened, who is involved, why it matters. Plain sentences, no bold, no headers.',
   explain: 'Explain the background a reader needs to make sense of this story — the context leading up to it, the parties involved and what is likely at stake. Three short paragraphs at most.',
   brief: 'Write a short briefing on the headlines below: the 3-4 threads that actually matter today and one sentence on each. Lead with the most consequential. No headers.',
+  // The point is the spread, not a verdict. A model picking a winner here would
+  // be doing the one thing this app exists to avoid.
+  compare: [
+    'Several newsrooms below are covering the same event. Set out, in this order:',
+    '- Agreed: the facts every account carries.',
+    '- Differs: where the accounts diverge in fact, in emphasis, or in framing — name the outlets on each side.',
+    '- Only one outlet reports: anything carried by a single newsroom, attributed to it.',
+    'Attribute every claim to the outlet that made it. Do not decide which account is correct and do not rank the outlets for credibility — show the reader the spread and let them judge.',
+    'If the accounts are substantially the same, say so plainly in one line rather than manufacturing disagreement.',
+  ].join('\n'),
   ask: '',
 };
 
@@ -115,6 +127,28 @@ function buildMessages(body) {
       `Published: ${str(a.publishedAt, 40) || 'unknown'}\n\n` +
       `${FENCE}\n${str(a.text, LIMITS.articleChars)}\n${FENCE}`
     );
+  }
+
+  /* One event, several newsrooms. Each account is fenced separately and headed
+     with its outlet's provenance, so the model can attribute a claim to a named
+     outlet — and so "who says what" has something to say about who. */
+  if (Array.isArray(body.cluster) && body.cluster.length > 1) {
+    const accounts = body.cluster
+      .slice(0, LIMITS.clusterOutlets)
+      .map((c) => {
+        const text = str(c?.text, LIMITS.clusterChars);
+        if (!text) return '';
+        const source = str(c?.source, 80) || 'unknown outlet';
+        const where = str(c?.country, 4);
+        const funding = str(c?.ownership, 20);
+        const provenance = [where && where.toUpperCase(), funding && `${funding}-funded`].filter(Boolean).join(', ');
+        return `### ${source}${provenance ? ` (${provenance})` : ''}\n` +
+               `Headline: ${str(c?.title, 300)}\n${FENCE}\n${text}\n${FENCE}`;
+      })
+      .filter(Boolean);
+    if (accounts.length > 1) {
+      parts.push(`Accounts of the same event from ${accounts.length} newsrooms:\n\n${accounts.join('\n\n')}`);
+    }
   }
 
   if (Array.isArray(body.headlines) && body.headlines.length) {
