@@ -198,6 +198,8 @@ function openSheet() {
   setThemeNote(s.theme || 'dark');
   $('#set-datasaver').checked = !!s.datasaver;
   $('#set-motion').checked = !!s.motion;
+  const at = $('#set-autotranslate');
+  if (at) at.checked = !!s.autoTranslate;
   const nBox = $('#set-notify');
   if (nBox) nBox.checked = !!s.notify && 'Notification' in window && Notification.permission === 'granted';
   sheetEl.hidden = false; backdropEl.hidden = false;
@@ -233,6 +235,34 @@ $('#topic-add')?.addEventListener('submit', (e) => {
   input.value = '';
   renderTopicChips();
 });
+/* ---------- translation ----------
+   The whole group is hidden where the browser has no built-in translator: an
+   inert language picker is worse than no picker. */
+(() => {
+  const group = $('#set-translate-group');
+  const sel = $('#set-translate-to');
+  const auto = $('#set-autotranslate');
+  if (!group || !sel || typeof Translate === 'undefined' || !Translate.supported) return;
+
+  group.hidden = false;
+  const now = Translate.target();
+  sel.innerHTML = Translate.targets
+    .map(([code, name]) => `<option value="${code}"${code === now ? ' selected' : ''}>${esc(name)}</option>`)
+    .join('');
+
+  sel.addEventListener('change', () => {
+    saveSettings({ translateTo: sel.value });
+    // The open story was offered against the old target — re-evaluate it.
+    Translate.restore();
+    Translate.offer();
+    toast(`Stories will read in ${sel.options[sel.selectedIndex].text}`);
+  });
+  auto?.addEventListener('change', () => {
+    saveSettings({ autoTranslate: auto.checked });
+    if (auto.checked) Translate.offer();
+  });
+})();
+
 /* ---------- appearance ----------
    theme.js owns the classes and the system subscription; this is only the
    control surface. Writing `theme` into the same settings blob is what the boot

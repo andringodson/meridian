@@ -283,6 +283,14 @@
       </div>
       <p class="set-note" id="edition-note">Sets the newsroom mix and the regional slice of Google News behind every tab.</p>
     </div>
+    <div class="set-group" id="set-translate-group" hidden>
+      <div class="set-label">Translation · on-device</div>
+      <label class="tgl"><span>Read stories in</span>
+        <select id="set-translate-to" aria-label="Translate stories into"></select>
+      </label>
+      <label class="tgl"><input type="checkbox" id="set-autotranslate" /> <span>Translate automatically</span></label>
+      <p class="set-note">Meridian uses your browser's built-in translator, so the story never leaves your device. Each language pair downloads once, then works offline. Automatic translation waits until that download has already happened.</p>
+    </div>
     <div class="set-group">
       <div class="set-label">Open at launch</div>
       <div class="seg" id="set-default">
@@ -330,6 +338,7 @@
   <script src="/fluid.js" defer></script>
   <script src="/embed.js" defer></script>
   <script src="/readaloud.js" defer></script>
+  <script src="/translate.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/features.js" defer></script>
   <script src="/assistant.js" defer></script>

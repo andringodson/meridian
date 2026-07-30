@@ -1148,7 +1148,20 @@ html.morphing .reader-panel, html.morphing .reader-backdrop { animation: none; }
 }
 .reader-listen.on { color: var(--text); border-color: var(--accent); background: var(--tint-soft); }
 .reader-rate { font-variant-numeric: tabular-nums; min-width: 52px; justify-content: center; }
-.reader-rate[hidden] { display: none; }
+.reader-rate[hidden], .reader-translate[hidden] { display: none; }
+.reader-translate.on { color: var(--text); border-color: var(--accent); background: var(--tint-soft); }
+.reader-translate:disabled { opacity: .55; cursor: wait; }
+
+/* language picker in Settings */
+#set-translate-to {
+  margin-left: auto;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 6px 9px; font: 13px var(--body); cursor: pointer; outline: none;
+}
+#set-translate-to:focus { border-color: var(--accent); }
+#set-translate-group .tgl { justify-content: flex-start; }
+#set-translate-group[hidden] { display: none; }
 
 /* ---------- pointer response ----------
    pointer.js writes --mx/--my on the hovered card and a transform on nearby

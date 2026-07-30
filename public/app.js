@@ -1460,6 +1460,7 @@ function renderReaderShell(a) {
         <button class="reader-act reader-sum" hidden aria-label="Summarize this story"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z"/><circle cx="19" cy="4.5" r="1.4"/></svg><span>Summarize</span></button>
         <button class="reader-act reader-listen" hidden aria-label="Read this story aloud" aria-pressed="false"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Listen</span></button>
         <button class="reader-act reader-rate" hidden aria-label="Change reading speed" title="Reading speed"><span>1×</span></button>
+        <button class="reader-act reader-translate" hidden aria-label="Translate this story"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h11"/><path d="M8.5 3.5V5"/><path d="M11.5 5c-.6 4.6-3.4 8-8 9.5"/><path d="M6 9.5c.9 2.4 2.9 4.2 5.5 5"/><path d="M13 20l4-9 4 9"/><path d="M14.6 17h4.8"/></svg><span>Translate</span></button>
         <button class="reader-act reader-ask" hidden aria-label="Ask the assistant about this story"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-8.8A8.4 8.4 0 1 1 21 11.5z"/><path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.4-2.8 2.4"/><path d="M12 16.2h.01"/></svg><span>Ask</span></button>
       </div>
       ${coverageHTML(a)}
@@ -1608,6 +1609,9 @@ async function showReader(index) {
       if (typeof ReadAloud !== 'undefined' && ReadAloud.supported) {
         const b = $('.reader-listen', reader); if (b) b.hidden = false;
       }
+      // Translation decides for itself whether to appear: it has to detect the
+      // language and confirm the pair is supported before offering anything.
+      if (typeof Translate !== 'undefined') Translate.offer();
     } else {
       const s = $('.reader-status', body);
       if (s) s.outerHTML = linkOut(a);
@@ -1720,6 +1724,7 @@ reader.addEventListener('click', (e) => {
   if (sum) { summarizeStory(sum); return; }
   if (e.target.closest('.reader-listen')) { ReadAloud.toggle(); return; }
   if (e.target.closest('.reader-rate')) { ReadAloud.cycleRate(); return; }
+  if (e.target.closest('.reader-translate')) { Translate.run(); return; }
   if (e.target.closest('.reader-ask')) {
     // Opens the panel already reading this story; no question sent yet.
     if (typeof Assistant !== 'undefined') Assistant.open();
