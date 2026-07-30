@@ -261,6 +261,46 @@ $('#topic-add')?.addEventListener('submit', (e) => {
   input.value = '';
   renderTopicChips();
 });
+/* ---------- deferred enhancements ----------
+   Neither the pointer effects nor the command palette is needed to read the
+   news, and both were costing parse and execute time on the critical path
+   while eighty article images were still arriving — measurably, about four
+   points of the smoke test's image-decode rate. They now load on the first
+   interaction that could possibly want them, which on a page someone is
+   reading rather than driving is never.
+
+   Injected with a same-origin src, so `script-src 'self'` is satisfied without
+   an inline block. */
+(() => {
+  const load = (src) => new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = res;
+    s.onerror = rej;
+    document.head.appendChild(s);
+  });
+
+  let pointerAsked = false;
+  addEventListener('pointermove', function onMove(e) {
+    // Touch never wants the magnetic pull; it has no hover to trigger it.
+    if (pointerAsked || e.pointerType !== 'mouse') return;
+    pointerAsked = true;
+    removeEventListener('pointermove', onMove);
+    load('/pointer.js').catch(() => { /* enhancement only */ });
+  }, { passive: true });
+
+  let paletteAsked = false;
+  addEventListener('keydown', function onKey(e) {
+    if (paletteAsked || !((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) return;
+    e.preventDefault();
+    paletteAsked = true;
+    removeEventListener('keydown', onKey);
+    // The keystroke that triggered the load still has to open it — palette.js
+    // only starts listening once it has run, so it would miss its own cue.
+    load('/palette.js').then(() => self.Palette?.show()).catch(() => { /* enhancement only */ });
+  });
+})();
+
 /* ---------- translation ----------
    The whole group is hidden where the browser has no built-in translator: an
    inert language picker is worse than no picker. */
