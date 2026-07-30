@@ -202,13 +202,25 @@ const Assistant = (() => {
 
   /* ---------- backend probe ---------- */
 
+  let probing = null;     // in-flight probe, shared by concurrent callers
+
   async function probe() {
     if (backend) return backend;
+    // Opening the panel probes, and asking immediately probes again — against a
+    // cold serverless function that was two round trips where one would do.
+    if (probing) return probing;
+    probing = (async () => {
+      try {
+        const r = await fetch('/api/ai', { headers: { Accept: 'application/json' } });
+        return r.ok ? await r.json() : { available: false, model: null };
+      } catch {
+        return { available: false, model: null };    // offline — on-device path still works
+      }
+    })();
     try {
-      const r = await fetch('/api/ai', { headers: { Accept: 'application/json' } });
-      backend = r.ok ? await r.json() : { available: false, model: null };
-    } catch {
-      backend = { available: false, model: null };   // offline — on-device path still works
+      backend = await probing;
+    } finally {
+      probing = null;
     }
     if (badgeEl) {
       badgeEl.textContent = backend.available ? (backend.model || 'open model') : 'on-device';

@@ -1261,10 +1261,14 @@ html.morphing .reader-panel, html.morphing .reader-backdrop { animation: none; }
   position: relative;          /* .card already is; the other two need it */
 }
 .card::after, .vcard::after, .mkt-card::after {
+  /* The gradient is attached only while a card is lit (below). Declaring it on
+     every card and hiding it behind opacity:0 still costs one full-card
+     radial-gradient paint per card — across a ~77-card feed that measurably
+     delayed image decoding on first load, for an effect that is by definition
+     visible on one card at a time. */
   content: ''; position: absolute; inset: 0; z-index: 1;
   pointer-events: none; opacity: 0;
   border-radius: inherit;
-  background: radial-gradient(420px circle at var(--mx) var(--my), var(--spot), transparent 66%);
   transition: opacity .28s ease;
 }
 /* The wash lights the card's surface, so it belongs under the content. Card
@@ -1272,7 +1276,10 @@ html.morphing .reader-panel, html.morphing .reader-backdrop { animation: none; }
    ::after however low its z-index — hence lifting them rather than sinking it
    (z-index:-1 would drop it behind the card's own background and vanish). */
 .card > *, .vcard > *, .mkt-card > * { position: relative; z-index: 2; }
-.card.lit::after, .vcard.lit::after, .mkt-card.lit::after { opacity: 1; }
+.card.lit::after, .vcard.lit::after, .mkt-card.lit::after {
+  opacity: 1;
+  background: radial-gradient(420px circle at var(--mx) var(--my), var(--spot), transparent 66%);
+}
 /* The hero card paints its own gradient scrim over the picture; a second wash
    on top of it muddies the headline. */
 .card.lead.has-img::after { display: none; }
