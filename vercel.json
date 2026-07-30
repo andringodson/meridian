@@ -4,6 +4,9 @@
   "outputDirectory": "dist",
   "cleanUrls": true,
   "trailingSlash": false,
+  "rewrites": [
+    { "source": "/s", "destination": "/api/share" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

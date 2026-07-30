@@ -1712,14 +1712,21 @@ function updateReaderNav() {
 const linkOut = (a, site) =>
   `<p class="reader-cont"><a href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">Continue reading at ${esc(site || a.source || 'the source')} <span aria-hidden="true">↗</span></a></p>`;
 
-/* Sharing a story shares a Meridian link (?read=<url>) that reopens it in the
-   reader — so a share brings the reader back to Meridian, not straight to the
-   outlet. The reader always links out to the source, so credit is preserved. */
+/* Sharing a story shares a Meridian link that reopens it in the reader — so a
+   share brings the reader back to Meridian, not straight to the outlet. The
+   reader always links out to the source, so credit is preserved.
+
+   The link points at /s rather than /?read=, because a static index.html can
+   only carry one set of Open Graph tags: every story pasted anywhere previewed
+   as the Meridian logo and the site tagline. /s serves the story's own
+   headline and photograph to crawlers and hands people straight on to the app
+   (see api/share.js). The `t` hint is still carried so the headline shows even
+   when the source page cannot be extracted. */
 function meridianShareUrl(article) {
   try {
-    const u = new URL('/', location.origin);
-    u.searchParams.set('read', article.link);
-    if (article.title) u.searchParams.set('t', article.title.slice(0, 200)); // headline shows instantly, even if extraction fails
+    const u = new URL('/s', location.origin);
+    u.searchParams.set('u', article.link);
+    if (article.title) u.searchParams.set('t', article.title.slice(0, 200));
     return u.toString();
   } catch { return article.link; }
 }

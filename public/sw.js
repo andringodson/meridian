@@ -1,7 +1,7 @@
 /* Meridian service worker — app-shell offline support.
    Shell: network-first (deploys apply on next load), cache fallback offline.
    Live API: network-first. */
-const SHELL = 'meridian-shell-v30';
+const SHELL = 'meridian-shell-v31';
 const STATE = 'meridian-state'; // tiny key-value store; survives shell upgrades
 // The opt-in semantic model is 7.5MB the reader chose to download. It lives in
 // its own cache (written by embed.js) and must outlive shell upgrades, or every
@@ -13,7 +13,7 @@ const READING = 'meridian-reading-v1';
 const KEEP = [SHELL, STATE, MODEL, READING];
 // theme.js is render-blocking in <head>: if it were ever missing offline the
 // shell would paint with the markup's fallback theme, so it belongs here.
-const ASSETS = ['/', '/index.html', '/styles.css', '/theme.js', '/app.js', '/fluid.js', '/features.js', '/embed.js', '/assistant.js', '/readaloud.js', '/translate.js', '/pointer.js', '/palette.js', '/fonts/space-grotesk-latin.woff2', '/logo.svg', '/manifest.webmanifest', '/icons/icon.svg'];
+const ASSETS = ['/', '/index.html', '/styles.css', '/theme.js', '/app.js', '/fluid.js', '/features.js', '/embed.js', '/assistant.js', '/readaloud.js', '/translate.js', '/pointer.js', '/palette.js', '/share-open.js', '/fonts/space-grotesk-latin.woff2', '/logo.svg', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -58,6 +58,12 @@ self.addEventListener('fetch', (e) => {
   // Model weights manage their own cache in embed.js — passing them through the
   // shell logic below would store a second 7.5MB copy on every load.
   if (url.pathname.startsWith('/models/')) return;
+
+  // /s is a per-story link preview rendered by a function (api/share.js). It is
+  // same-origin and not under /api/, so the shell logic below would happily
+  // store a separate copy of the app shell's cache entry for every story anyone
+  // ever shared — and could serve a stale one back. Leave it to the network.
+  if (url.pathname === '/s') return;
 
   // App shell: network-first so every deploy is live on the next load;
   // the cache copy only serves when offline.

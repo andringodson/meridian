@@ -81,12 +81,16 @@ function paragraphs(html) {
   return out;
 }
 
-export default async function handler(req, res) {
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  const url = String(req.query?.url || '');
+/* The extraction, separated from the endpoint so other routes can reuse it
+   in-process. api/share.js needs exactly this — a story's real headline, image
+   and outlet — to build a link preview, and an internal HTTP hop to our own
+   /api/read would double the latency and the cold starts for no gain.
+
+   Returns the same shape the endpoint serves, plus `cache`, the Cache-Control
+   the caller should apply for this outcome. */
+export async function extractPage(url) {
   if (!/^https?:\/\//i.test(url)) {
-    res.status(400).json({ ok: false, reason: 'bad-url' });
-    return;
+    return { ok: false, reason: 'bad-url', status: 400, cache: null };
   }
 
   let host = '';
@@ -95,9 +99,7 @@ export default async function handler(req, res) {
   // Google News links are obfuscated redirects we can't unwrap server-side;
   // the client keeps its own summary and just links out.
   if (/news\.google\.|google\.[a-z.]+\/rss/i.test(url)) {
-    res.setHeader('Cache-Control', 's-maxage=3600');
-    res.status(200).json({ ok: false, reason: 'redirect' });
-    return;
+    return { ok: false, reason: 'redirect', status: 200, cache: 's-maxage=3600' };
   }
 
   const ctrl = new AbortController();
@@ -131,9 +133,10 @@ export default async function handler(req, res) {
     let author = meta(html, 'author', 'article:author', 'og:article:author');
     if (/^https?:\/\//i.test(author) || author.length > 60) author = '';
 
-    res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=86400, stale-if-error=86400');
-    res.status(200).json({
+    return {
       ok: kept.length > 0,
+      status: 200,
+      cache: 's-maxage=600, stale-while-revalidate=86400, stale-if-error=86400',
       url: finalUrl,
       site: meta(html, 'og:site_name') || host,
       title: meta(html, 'og:title', 'twitter:title'),
@@ -142,11 +145,17 @@ export default async function handler(req, res) {
       published: meta(html, 'article:published_time', 'og:article:published_time', 'article:modified_time'),
       paragraphs: kept,
       truncated: kept.length < paras.length || paras.length >= 10,
-    });
+    };
   } catch {
-    res.setHeader('Cache-Control', 's-maxage=120');
-    res.status(200).json({ ok: false, reason: 'fetch-failed' });
+    return { ok: false, reason: 'fetch-failed', status: 200, cache: 's-maxage=120' };
   } finally {
     clearTimeout(timer);
   }
+}
+
+export default async function handler(req, res) {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  const { status, cache, ...payload } = await extractPage(String(req.query?.url || ''));
+  if (cache) res.setHeader('Cache-Control', cache);
+  res.status(status).json(payload);
 }

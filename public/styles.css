@@ -1171,6 +1171,19 @@ html.morphing .reader-panel, html.morphing .reader-backdrop { animation: none; }
 .ec-follow:hover { color: var(--accent-hi); }
 .echip.following .ec-follow { color: var(--accent-hi); }
 
+/* ---------- shared-link interstitial (/s) ----------
+   Seen for a frame at most, and only ever by someone with JavaScript off. It
+   still has to look like Meridian rather than a broken page. */
+.share-wait {
+  max-width: 620px; margin: 0 auto; padding: clamp(48px, 12vh, 120px) 20px;
+  display: flex; flex-direction: column; gap: 14px; align-items: flex-start;
+}
+.share-kicker {
+  font: 700 10px var(--display); letter-spacing: .18em; text-transform: uppercase; color: var(--accent-hi);
+}
+.share-wait h1 { font-size: clamp(24px, 4vw, 34px); line-height: 1.15; text-wrap: balance; }
+.share-src { font-size: 13px; color: var(--text-2); }
+
 /* ---------- command palette (⌘K) ---------- */
 .cp { position: fixed; inset: 0; z-index: 190; display: flex; justify-content: center; }
 .cp[hidden] { display: none; }
