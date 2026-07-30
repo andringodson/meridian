@@ -74,6 +74,22 @@ applySettings();
 const SUGGESTED_TOPICS = ['AI', 'Space', 'Climate', 'Crypto', 'Football', 'Cricket', 'Elections', 'Movies'];
 function getTopics() { return getSettings().topics || []; }
 
+/* ---------- followed entities ----------
+   Kept apart from topics on purpose. A topic is a standing interest the reader
+   typed ("Climate"); an entity is a specific subject they picked out of today's
+   news ("Reserve Bank of India"). They are both fed to For You, but an entity
+   is a name rather than a theme, so it is matched more strictly — a substring
+   hit on a full name is evidence, whereas the same rule on a one-word topic
+   would match half the feed. */
+function getEntities() { return getSettings().entities || []; }
+function toggleEntity(name) {
+  const cur = getEntities();
+  const hit = cur.find((e) => e.toLowerCase() === String(name).toLowerCase());
+  const next = hit ? cur.filter((e) => e !== hit) : [...cur, name].slice(-40);
+  saveSettings({ entities: next });
+  return !hit;
+}
+
 /* A reader's taste as one vector: the topics they follow plus the headlines
    they actually saved, averaged. Ranking the pool against it catches stories a
    keyword list would miss — following "Space" surfaces a launch-delay story
@@ -82,15 +98,19 @@ function getTopics() { return getSettings().topics || []; }
 function tasteVector() {
   if (!semanticOn()) return null;
   const topics = getTopics().map((t) => Embed.embed(t));
+  const entities = getEntities().map((e) => Embed.embed(e));
   const saved = (typeof getSaved === 'function' ? getSaved() : [])
     .slice(0, 40).map((a) => Embed.embed(a.title || ''));
-  return Embed.centroid([...topics, ...topics, ...saved]); // topics weigh double — they were chosen deliberately
+  // Topics and entities were both chosen deliberately, so both weigh double
+  // against the passively-accumulated saved queue.
+  return Embed.centroid([...topics, ...topics, ...entities, ...entities, ...saved]);
 }
 
 async function buildForYou() {
   const topics = getTopics();
+  const entities = getEntities();
   const taste = tasteVector();
-  if (!topics.length && !taste) return [];
+  if (!topics.length && !entities.length && !taste) return [];
   const cats = ['top', 'world', 'business', 'technology', 'science', 'health', 'sports', 'entertainment'];
   const results = await Promise.allSettled(
     cats.map((c) => fetch(`/api/news?category=${c}${edParam()}`).then((r) => r.json()))
@@ -113,12 +133,18 @@ async function buildForYou() {
       .slice(0, 60)
       .map((x) => x.a);
   }
+  // Keyword gear, used when the semantic model is off. A followed entity is a
+  // specific name, so a hit on it is stronger evidence than a hit on a broad
+  // topic word — and it is matched whole, or "Reserve Bank" would also score
+  // every story containing "bank".
   const terms = topics.map((t) => t.toLowerCase());
+  const names = entities.map((e) => e.toLowerCase());
   return pool
     .map((a) => {
       const hay = (a.title + ' ' + (a.summary || '')).toLowerCase();
       let s = 0;
       for (const t of terms) if (hay.includes(t)) s += 2;
+      for (const n of names) if (hay.includes(n)) s += 3;
       if (s) s += recency(a) + (a.image ? 0.3 : 0);
       return { a, s };
     })

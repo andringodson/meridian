@@ -100,6 +100,18 @@
     add('Setting', 'Toggle data saver', () => document.getElementById('set-datasaver')?.click(), s.datasaver ? 'On' : 'Off');
     add('Setting', 'Toggle reduced motion', () => document.getElementById('set-motion')?.click(), s.motion ? 'On' : 'Off');
 
+    // Followed entities are specific subjects picked out of the news; they get
+    // their own group so a long topic list can't bury them.
+    for (const name of (s.entities || [])) {
+      add('Following', name, () => {
+        const box = document.getElementById('search-input');
+        if (!box) return;
+        box.value = name;
+        box.focus();
+        box.dispatchEvent(new Event('input', { bubbles: true }));
+      }, 'Stories');
+    }
+
     // Followed topics run a search — the fastest way back to a subject.
     for (const t of (s.topics || [])) {
       add('Topic', t, () => {

@@ -647,36 +647,115 @@ const TREND_STOP = new Set((
   'back down before know need thing things five three four wins loses against between ' +
   'during without other others another every despite because through these those since'
 ).split(' '));
-function renderTrends(articles) {
-  if (!trendsEl) return;
-  const byWord = new Map(); // lowercase → { display, count }
+/* ---------- entities ----------
+   Words were never the unit anyone cares about: "Reserve" and "Bank" separately
+   are noise, "Reserve Bank" is a subject you might want to follow. So the run of
+   capitalised tokens is taken as the candidate, with lowercase connectors kept
+   inside it ("Bank of England") and trimmed off the end.
+
+   Capitalisation only carries information in a sentence-case headline. Plenty
+   of outlets set headlines in Title Case, where every word is capitalised and
+   the heuristic would return the entire headline as one entity — those are
+   detected by ratio and skipped rather than allowed to flood the list.
+
+   The first word of a headline is capitalised whatever it is, so it cannot be
+   judged locally. It is admitted anyway and the cross-outlet threshold below
+   settles it: a real subject leads headlines at several newsrooms, while
+   "Central" leading one does not clear the bar. */
+/* Only genuinely intra-name particles may sit inside a run. "and" must not:
+   "Bank of England" is one subject, but "UK and US" is two, and treating the
+   conjunction as glue would invent a country called "UK and US". */
+const INNER = /^(of|de|da|del|della|van|von|der|den|bin|al|el|ibn)$/i;
+const LEADING = /^(the|a|an)$/i;
+
+function entitiesIn(title) {
+  const toks = String(title).split(/[^A-Za-z0-9'’&.-]+/).filter(Boolean);
+  if (toks.length < 2) return [];
+  const caps = toks.filter((w) => /^[A-Z]/.test(w)).length;
+  if (caps / toks.length > 0.6) return [];        // Title Case — no signal here
+
+  const runs = [];
+  let cur = [];
+  for (const w of toks) {
+    const isCap = /^[A-Z]/.test(w) && w.length > 1 && !/^\d+$/.test(w);
+    if (isCap && !TREND_STOP.has(w.toLowerCase())) { cur.push(w); continue; }
+    if (cur.length && INNER.test(w)) { cur.push(w); continue; }
+    if (cur.length) { runs.push(cur); cur = []; }
+  }
+  if (cur.length) runs.push(cur);
+
+  const out = [];
+  for (const r of runs) {
+    // Trim particles from both ends — a name neither starts on "The" nor ends
+    // on "of", however the surrounding sentence ran.
+    while (r.length && (INNER.test(r[0]) || LEADING.test(r[0]))) r.shift();
+    while (r.length && INNER.test(r[r.length - 1])) r.pop();
+    if (!r.length) continue;
+    if (r.length === 1 && (r[0].length < 4 || TREND_STOP.has(r[0].toLowerCase()))) continue;
+    out.push(r.slice(0, 4).join(' '));
+  }
+  return out;
+}
+
+/* Ranked by how many newsrooms carry it, not how often it appears — one outlet
+   repeating itself is not a trend. */
+function rankEntities(articles) {
+  const byKey = new Map();   // lowercase → { display, count, sources:Set }
   for (const a of articles) {
-    const seenHere = new Set();
-    for (const raw of a.title.split(/[^A-Za-z0-9'-]+/)) {
-      const w = raw.replace(/^['-]+|['-]+$/g, '');
-      const lower = w.toLowerCase();
-      if (w.length < 4 || TREND_STOP.has(lower) || /^\d+$/.test(w) || seenHere.has(lower)) continue;
-      seenHere.add(lower);
-      let e = byWord.get(lower);
-      if (!e) byWord.set(lower, (e = { display: w, count: 0 }));
+    const seen = new Set();
+    for (const name of entitiesIn(a.title)) {
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      let e = byKey.get(key);
+      if (!e) byKey.set(key, (e = { display: name, count: 0, sources: new Set() }));
       e.count++;
-      if (w[0] === w[0].toUpperCase()) e.display = w; // prefer proper-noun casing
+      if (a.source) e.sources.add(a.source);
+      if (name.length > e.display.length) e.display = name;   // prefer the fuller form
     }
   }
-  const top = [...byWord.values()]
-    .filter((e) => e.count >= 3)
-    .sort((a, b) => b.count - a.count)
+  return [...byKey.values()]
+    .filter((e) => e.sources.size >= 2 || e.count >= 3)
+    .sort((x, y) => (y.sources.size - x.sources.size) || (y.count - x.count))
     .slice(0, 8);
-  if (top.length < 3) { trendsEl.hidden = true; trendsEl.innerHTML = ''; return; }
-  trendsEl.innerHTML = `<span class="trend-label">Trending</span>` +
-    top.map((e) => `<button class="tchip trend-chip" data-t="${esc(e.display)}">${esc(e.display)}</button>`).join('');
+}
+
+function renderTrends(articles) {
+  if (!trendsEl) return;
+  const top = rankEntities(articles);
+  if (top.length < 2) { trendsEl.hidden = true; trendsEl.innerHTML = ''; return; }
+  const followed = new Set((typeof getEntities === 'function' ? getEntities() : []).map((s) => s.toLowerCase()));
+  trendsEl.innerHTML = `<span class="trend-label">In the news</span>` +
+    top.map((e) => {
+      const on = followed.has(e.display.toLowerCase());
+      const where = e.sources.size > 1 ? `${e.sources.size} outlets` : `${e.count} stories`;
+      return `<span class="echip${on ? ' following' : ''}">
+        <button class="ec-name" data-t="${esc(e.display)}" title="Filter to ${esc(e.display)} · ${where}">${esc(e.display)}</button>
+        <button class="ec-follow" data-follow="${esc(e.display)}" aria-pressed="${on}"
+          aria-label="${on ? 'Unfollow' : 'Follow'} ${esc(e.display)}" title="${on ? 'Unfollow' : 'Follow — feeds For You'}">${on ? '★' : '+'}</button>
+      </span>`;
+    }).join('');
   trendsEl.hidden = false;
 }
+
 trendsEl?.addEventListener('click', (e) => {
-  const chip = e.target.closest('.trend-chip');
+  const follow = e.target.closest('.ec-follow');
+  if (follow) {
+    const name = follow.dataset.follow;
+    const now = typeof toggleEntity === 'function' ? toggleEntity(name) : false;
+    const chip = follow.closest('.echip');
+    chip?.classList.toggle('following', now);
+    follow.textContent = now ? '★' : '+';
+    follow.setAttribute('aria-pressed', String(now));
+    follow.setAttribute('aria-label', `${now ? 'Unfollow' : 'Follow'} ${name}`);
+    toast(now ? `Following ${name}` : `Unfollowed ${name}`);
+    if (currentCat === 'foryou') loadNews('foryou', { skeleton: false });
+    return;
+  }
+  const chip = e.target.closest('.ec-name');
   if (!chip) return;
   const wasOn = chip.classList.contains('on');
-  trendsEl.querySelectorAll('.trend-chip').forEach((c) => c.classList.remove('on'));
+  trendsEl.querySelectorAll('.ec-name').forEach((c) => c.classList.remove('on'));
   if (wasOn) { searchInput.value = ''; } else { chip.classList.add('on'); searchInput.value = chip.dataset.t; }
   applySearch();
 });

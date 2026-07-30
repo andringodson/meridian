@@ -1137,6 +1137,31 @@ html.morphing .reader-panel, html.morphing .reader-backdrop { animation: none; }
 }
 .set-btn:hover { color: var(--text); border-color: var(--accent); }
 
+/* ---------- entity chips ("In the news") ----------
+   Two targets in one pill: the name filters the feed, the tail follows the
+   subject. Split so a mis-tap never silently changes what you follow. */
+.echip {
+  display: inline-flex; align-items: stretch;
+  border: 1px solid var(--border); border-radius: 999px; overflow: hidden;
+  transition: border-color .15s;
+}
+.echip:hover { border-color: var(--border-2); }
+.echip.following { border-color: var(--accent); background: var(--tint); }
+.ec-name {
+  background: none; border: 0; color: var(--text-2); cursor: pointer;
+  font: 12px var(--body); padding: 6px 4px 6px 12px; white-space: nowrap;
+  transition: color .15s;
+}
+.ec-name:hover, .ec-name.on { color: var(--text); }
+.echip.following .ec-name { color: var(--on-tint); }
+.ec-follow {
+  background: none; border: 0; color: var(--text-2); cursor: pointer;
+  font: 600 12px var(--display); line-height: 1; padding: 6px 11px 6px 6px;
+  transition: color .15s;
+}
+.ec-follow:hover { color: var(--accent-hi); }
+.echip.following .ec-follow { color: var(--accent-hi); }
+
 /* ---------- command palette (⌘K) ---------- */
 .cp { position: fixed; inset: 0; z-index: 190; display: flex; justify-content: center; }
 .cp[hidden] { display: none; }
