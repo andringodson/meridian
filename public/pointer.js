@@ -136,8 +136,19 @@
 
   fine.addEventListener?.('change', refresh);
   reduce.addEventListener?.('change', refresh);
-  // features.js toggles .reduce-motion on <html> from Settings.
-  new MutationObserver(refresh).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+  /* features.js toggles .reduce-motion on <html> from Settings, so the class
+     list has to be watched — but app.js also toggles .chrome-hidden there on
+     every change of scroll direction, and rescanning the whole document for
+     controls on each of those was pure waste. Only act when the one class this
+     cares about actually flips. */
+  let wasReduced = motionOff();
+  new MutationObserver(() => {
+    const now = motionOff();
+    if (now === wasReduced) return;
+    wasReduced = now;
+    refresh();
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
   collectMagnets();
 })();

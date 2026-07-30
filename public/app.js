@@ -2048,13 +2048,32 @@ const tabsEl = $('#tabs');
   let last = scrollY;
   let ticking = false;
 
+  /* scrollHeight forces layout, and on a feed of ~80 content-visibility cards
+     that is not cheap. Reading it once per animation frame — which is what a
+     smooth scroll through the whole feed asks for — starved image decoding
+     badly enough to halve the smoke test's decode rate. The page cannot change
+     height mid-flick, so a cached value refreshed twice a second is exact
+     enough for a bottom-of-page test. */
+  let maxCache = 0, maxAt = -1e9;
+  const scrollMax = () => {
+    const now = performance.now();
+    if (now - maxAt > 500) {
+      maxCache = document.documentElement.scrollHeight - innerHeight;
+      maxAt = now;
+    }
+    return maxCache;
+  };
+  addEventListener('resize', () => { maxAt = -1e9; }, { passive: true });
+
   const onFrame = () => {
     ticking = false;
     const y = scrollY;
-    const max = document.documentElement.scrollHeight - innerHeight;
+    const max = scrollMax();
     const diff = y - last;
 
-    toTop.hidden = y < 600;
+    // Writing .hidden every frame invalidates style even when unchanged.
+    const wantTop = y < 600;
+    if (toTop.hidden !== wantTop) toTop.hidden = wantTop;
 
     // Rubber-band overscroll at either end moves the page without the reader
     // asking for a direction — treat both as "open".
