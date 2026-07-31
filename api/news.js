@@ -402,59 +402,179 @@ function parseFeed(xml, feedUrl) {
   return arr.map((it) => normalize(it, feedUrl)).filter((a) => a.title && a.link && a.source);
 }
 
+// Unicode-aware on purpose: the previous [^a-z0-9] form silently mapped any
+// headline outside the Latin alphabet to the empty string, which made every one
+// of them collide on the same dedupe key and collapse into a single article.
+// Every edition is English today, so nothing was losing stories — but the first
+// non-Latin edition would have, quietly.
 const keyOf = (a) =>
-  a.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 80);
+  a.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().slice(0, 80);
 
 /* ---------- same-story clustering ----------
    Exact-key dedupe can't see the same event worded differently by different
-   outlets. Titles that share most of their significant words are folded into
-   one article carrying a `coverage` list of the other outlets, so a story on
-   every front page reads as one card with its breadth visible — not five
-   near-identical cards. */
+   outlets. Titles that share their distinctive words are folded into one article
+   carrying a `coverage` list of the other outlets, so a story on every front
+   page reads as one card with its breadth visible — not five near-identical
+   cards.
+
+   Two decisions do most of the work, and both were settled by measuring against
+   test/clustering-cases.mjs rather than by argument (`npm run eval:cluster`):
+
+   1. Words are weighted by how rare they are in the batch being clustered, not
+      counted. A hand-written stopword list cannot know that "tariffs" is noise
+      on a day when forty headlines carry it; inverse document frequency does,
+      because it is computed from the same pull. So a two-word match on
+      genuinely distinctive terms can merge, while a three-word match on today's
+      ambient vocabulary no longer does. The static list is kept underneath it as
+      a floor, because a small batch can make an ordinary word look rare.
+
+   2. Clusters merge on average linkage, not transitively. A wrap-up piece that
+      names two separate disputes is similar to both, and single-link merging
+      chains them into one cluster describing neither — which costs the reader a
+      story off the feed entirely, the worst failure this pass has. Requiring the
+      average similarity across every member to clear the bar refuses that merge,
+      because the two disputes are not similar to each other. */
 const STOP = new Set((
   'the a an of to in on for and with as at by after over from is are be has ' +
   'have it its his her their new says say said will was were this that not ' +
   'no but up out how what why who more than into about amid against could would'
 ).split(' '));
-function sigTokens(title) {
+
+// Length is a crude proxy for "carries meaning". It holds for alphabetic
+// scripts; CJK, where a word is one or two characters, would need segmentation
+// this does not attempt.
+function sigTokens(text) {
   const set = new Set();
-  for (const w of title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)) {
+  for (const w of String(text).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(/\s+/)) {
     if (w.length > 3 && !STOP.has(w)) set.add(w);
   }
   return set;
 }
-function clusterStories(list) {
-  const toks = list.map((a) => sigTokens(a.title));
-  const parent = list.map((_, i) => i);
-  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
-  // Candidate pairs come from a token index (very common tokens are skipped),
-  // so the pass stays near-linear instead of comparing every title pair.
+
+/* The summary says the same thing in other words, which is precisely the
+   evidence missing when two newsrooms word a headline differently. It is
+   discounted rather than trusted equally: it is longer, so proportionally more
+   of it is incidental vocabulary. */
+const TITLE_W = 1;
+const SUMMARY_W = 0.4;
+
+function weigh(a) {
+  const m = new Map();
+  for (const w of sigTokens(a.title)) m.set(w, TITLE_W);
+  if (a.summary) for (const w of sigTokens(a.summary)) if (!m.has(w)) m.set(w, SUMMARY_W);
+  return m;
+}
+
+/* Cosine over the tf-idf vectors. Cosine rather than share-of-vocabulary
+   because it is the shared weight that decides, not the shared word count: two
+   headlines agreeing on the three words that identify the event score highly
+   even where one of them carries a clause of detail the other does not.
+
+   0.32 comes off the curve in scripts/eval-cluster.mjs (`npm run eval:cluster --
+   --sweep`), and it is not the highest-precision setting available. Anything
+   from 0.42 up scores a perfect 100% on the labelled set — but only by finding
+   41% of the true pairs, which is fewer than the old token-overlap pass managed.
+   0.32 is the setting that beats what it replaced on both counts at once
+   (precision 72% → 94%, recall 45% → 55%) rather than trading one failure for
+   the other. Its one remaining wrong merge folds an analysis piece into the
+   story it analyses, which is the least harmful shape that error takes. */
+const MERGE_MIN = 0.32;
+// One freak rare word in common is a coincidence, not a shared story.
+const MIN_SHARED = 2;
+
+export function clusterStories(list, { threshold = MERGE_MIN } = {}) {
+  const n = list.length;
+  if (n < 2) return list.slice();
+
+  const local = list.map(weigh);
+
+  const df = new Map();
+  for (const m of local) for (const w of m.keys()) df.set(w, (df.get(w) || 0) + 1);
+
+  const weights = local.map((m) => {
+    const out = new Map();
+    for (const [w, lw] of m) out.set(w, lw * Math.log((n + 1) / (df.get(w) + 0.5)));
+    return out;
+  });
+  const norm = weights.map((m) => {
+    let s = 0;
+    for (const v of m.values()) s += v * v;
+    return Math.sqrt(s);
+  });
+
+  const score = (i, j) => {
+    const a = weights[i], b = weights[j];
+    const [small, big] = a.size <= b.size ? [a, b] : [b, a];
+    let dot = 0, count = 0;
+    for (const [w, wa] of small) {
+      const wb = big.get(w);
+      if (wb === undefined) continue;
+      dot += wa * wb;
+      count++;
+    }
+    if (count < MIN_SHARED) return 0;
+    const d = norm[i] * norm[j];
+    return d > 0 ? dot / d : 0;
+  };
+
+  /* Candidates come from a token index so the pass stays near-linear instead of
+     comparing every pair. Tokens carried by a large share of the batch are left
+     out of it: they are the worst discriminators, they build the longest posting
+     lists, and a pair whose only link is one of them would not clear the bar
+     anyway. */
+  const dfMax = Math.max(12, Math.ceil(n * 0.2));
   const posts = new Map();
-  toks.forEach((set, i) => {
-    for (const w of set) {
+  local.forEach((m, i) => {
+    for (const w of m.keys()) {
+      if (df.get(w) > dfMax) continue;
       let p = posts.get(w);
       if (!p) posts.set(w, (p = []));
-      if (p.length < 20) p.push(i);
+      if (p.length < 60) p.push(i);
     }
   });
-  const tried = new Set();
-  toks.forEach((set, i) => {
-    for (const w of set) {
-      for (const j of posts.get(w)) {
-        if (j >= i) break;
-        const pairKey = j * list.length + i;
-        if (tried.has(pairKey)) continue;
-        tried.add(pairKey);
-        const other = toks[j];
-        let inter = 0;
-        for (const t of set) if (other.has(t)) inter++;
-        if (inter >= 3 && inter >= Math.min(set.size, other.size) * 0.6) {
-          const ri = find(i), rj = find(j);
-          if (ri !== rj) parent[rj] = ri;
-        }
+
+  // Every score computed, not just the passing ones — average linkage below has
+  // to know that a pair scored 0.4 rather than assume it scored nothing.
+  const pairScore = new Map();
+  const candidates = [];
+  for (const p of posts.values()) {
+    for (let x = 0; x < p.length; x++) {
+      for (let y = x + 1; y < p.length; y++) {
+        const i = p[x], j = p[y];
+        const k = i * n + j;
+        if (pairScore.has(k)) continue;
+        const s = score(i, j);
+        pairScore.set(k, s);
+        if (s >= threshold) candidates.push([s, i, j]);
       }
     }
-  });
+  }
+
+  // Strongest links first, so a cluster forms around its best evidence and the
+  // marginal pairs are judged against a group that already exists.
+  candidates.sort((a, b) => b[0] - a[0]);
+
+  const parent = list.map((_, i) => i);
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const members = list.map((_, i) => [i]);
+  const link = (i, j) => pairScore.get(i < j ? i * n + j : j * n + i) || 0;
+
+  for (const [, i, j] of candidates) {
+    const ri = find(i), rj = find(j);
+    if (ri === rj) continue;
+    const a = members[ri], b = members[rj];
+    // A pair that never surfaced as a candidate contributes zero. That is what
+    // stops a bridging story from joining two clusters that have nothing to do
+    // with each other: it is close to both, but they are far from one another,
+    // and the average carries that.
+    let sum = 0;
+    for (const x of a) for (const y of b) sum += link(x, y);
+    if (sum / (a.length * b.length) < threshold) continue;
+    parent[rj] = ri;
+    members[ri] = a.concat(b);
+    members[rj] = null;
+  }
+
   const groups = new Map();
   list.forEach((a, i) => {
     const r = find(i);
