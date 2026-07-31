@@ -24,6 +24,9 @@
   <meta name="twitter:image" content="https://meridian-andrin.vercel.app/og.png" />
   <meta name="author" content="Andrin Godson" />
 
+  <!-- The apple- prefix is deprecated but still what older iOS reads, so both
+       ship; Chrome logs a warning on every load without the unprefixed one. -->
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   <meta name="apple-mobile-web-app-title" content="Meridian" />
@@ -353,7 +356,12 @@
   <script src="/app.js" defer></script>
   <script src="/features.js" defer></script>
   <script src="/assistant.js" defer></script>
-  <!-- Vercel Web Analytics (free) — activates once enabled in the dashboard -->
-  <script defer src="/_vercel/insights/script.js"></script>
+  <!-- Vercel Web Analytics is NOT loaded here on purpose. The endpoint only
+       exists once Analytics is switched on in the project dashboard; until then
+       it answers 404 with an HTML error page, and Chrome refuses it loudly on
+       every single page load ("MIME type ('text/html') is not executable").
+       That was a console error every reader saw, for a script that did nothing.
+       To enable: turn on Analytics in the Vercel dashboard, then restore
+       <script defer src="/_vercel/insights/script.js"></script> here. -->
 </body>
 </html>
