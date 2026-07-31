@@ -104,8 +104,10 @@
           live.classList.add('stale');
           live.title = `Static mirror — snapshot taken ${new Date(m.generatedAt).toLocaleString()}. ` +
             'Reader, search, weather and the assistant need the live site.';
-          const label = live.querySelector('.live-label');
-          if (label) label.textContent = 'MIRROR';
+          // A class, not textContent: app.js rewrites this label every time it
+          // finishes a load, so anything written here is overwritten seconds later.
+          // CSS wins that race by not entering it.
+          live.classList.add('is-mirror');
         }
       })
       .catch(() => { /* the badge is a nicety */ });

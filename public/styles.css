@@ -1548,3 +1548,15 @@ html.morphing .reader-panel, html.morphing .reader-backdrop { animation: none; }
      to a square target — pin the width. */
   .ec-follow { padding: 9px 10px; min-width: 34px; }
 }
+
+/* ---------- static mirror badge ----------
+   Set by public/static-api.js on a functionless host. It has to be CSS rather
+   than a text write: app.js refreshes the LIVE label after every load and would
+   overwrite anything the shim put there. Inert on the real deployment, where
+   the class is never added. */
+.live.is-mirror .live-label { display: none; }
+.live.is-mirror::after {
+  content: 'MIRROR';
+  font-size: 11px; letter-spacing: 0.14em; color: var(--text-2);
+}
+@media (max-width: 700px) { .live.is-mirror::after { display: none; } }
