@@ -9,6 +9,9 @@ import * as esbuild from 'esbuild';
 import { minify as minifyHtml } from 'html-minifier-terser';
 
 const SRC = 'public';
+// Pages serves this repo under /meridian/, so its build asks for relative asset
+// paths. Vercel serves at the root and does not.
+const RELATIVE = process.argv.includes('--relative');
 const OUT = 'dist';
 
 async function walk(dir) {
@@ -89,7 +92,19 @@ async function build() {
       before += raw.length; after += code.length; min++;
     } else if (ext === '.html') {
       const raw = await readFile(src, 'utf8');
-      const out = await minifyHtml(raw, HTML_OPTS);
+      let out = await minifyHtml(raw, HTML_OPTS);
+      /* GitHub Pages serves a project at /<repo>/, where an absolute
+         src="/app.js" resolves to the domain root and 404s — the HTML arrives
+         and nothing else does. --relative rewrites asset references to be
+         relative to the document so the same build works at any prefix.
+
+         Only src/href are touched. Protocol-relative and absolute URLs are left
+         alone, and so is everything JS fetches at runtime: the mirror's shim
+         resolves /api/* itself, and the opt-in downloads it cannot reach fail
+         the way a missing model already fails. */
+      if (RELATIVE) {
+        out = out.replace(/\b(src|href)="\/(?!\/)/g, '$1="./');
+      }
       await writeFile(dst, out);
       before += raw.length; after += out.length; min++;
     } else {

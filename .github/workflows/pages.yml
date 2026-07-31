@@ -45,7 +45,7 @@ jobs:
       - run: npm ci
 
       - name: Build the site
-        run: npm run build
+        run: npm run build -- --relative
 
       - name: Freeze the API
         run: npm run snapshot
