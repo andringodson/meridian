@@ -1544,5 +1544,7 @@ html.morphing .reader-panel, html.morphing .reader-backdrop { animation: none; }
      smallest targets in the app, and they only appear once real stories have
      entities extracted, which is why a local feed never showed them. */
   .ec-name { padding: 9px 5px 9px 13px; }
-  .ec-follow { padding: 9px 12px 9px 7px; }
+  /* The glyph itself is only a few px wide, so padding alone never gets this
+     to a square target — pin the width. */
+  .ec-follow { padding: 9px 10px; min-width: 34px; }
 }
