@@ -106,14 +106,17 @@ function project(a, limitCoverage = 8) {
 export default async function handler(req, res) {
   // A public API is consumed cross-origin by definition.
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Vary', 'Origin');
   if (req.method === 'OPTIONS') { res.status(204).end(); return; }
 
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET, OPTIONS');
+  // HEAD is a safe method clients and proxies use to probe an endpoint, and
+  // refusing it meant `curl -I` reported 405 with none of the rate-limit
+  // headers it was asking about. Node suppresses the body for HEAD itself.
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.setHeader('Allow', 'GET, HEAD, OPTIONS');
     res.status(405).json({ error: 'method_not_allowed' });
     return;
   }
