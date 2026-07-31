@@ -56,6 +56,15 @@ const Assistant = (() => {
     catch { return 'us'; }
   };
 
+  /* A reader's own provider key, if they supplied one. Sent per request to this
+     app's own /api/ai, which uses it for that one upstream call and stores
+     nothing — see the note in api/ai.js. It is never rendered back into the
+     page: the settings field shows a mask, not the value. */
+  const readerKey = () => {
+    try { return (JSON.parse(localStorage.getItem('meridian-settings')) || {}).aiKey || ''; }
+    catch { return ''; }
+  };
+
   /* ---------- rendering ----------
      Model output is untrusted text. It is escaped first, then a deliberately
      small subset of markdown is re-introduced from the escaped string, so there
@@ -212,7 +221,11 @@ const Assistant = (() => {
     probing = (async () => {
       try {
         const r = await fetch('/api/ai', { headers: { Accept: 'application/json' } });
-        return r.ok ? await r.json() : { available: false, model: null };
+        const info = r.ok ? await r.json() : { available: false, model: null };
+        // A reader who brought their own key has a working backend even when
+        // the deployment itself has none configured.
+        if (!info.available && info.byok && readerKey()) info.available = true;
+        return info;
       } catch {
         return { available: false, model: null };    // offline — on-device path still works
       }
@@ -254,10 +267,13 @@ const Assistant = (() => {
     let text = '';
 
     try {
+      const mine = readerKey();
       const res = await fetch('/api/ai', {
         method: 'POST',
         signal: ctl.signal,
-        headers: { 'Content-Type': 'application/json' },
+        headers: mine
+          ? { 'Content-Type': 'application/json', 'X-AI-Key': mine }
+          : { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode: payload.mode || 'ask',
           question: payload.question || '',
@@ -277,9 +293,11 @@ const Assistant = (() => {
         if (err.error === 'ai-unconfigured') { backend = { available: false, model: null }; offline(out, payload, story); return; }
         out.classList.remove('is-streaming');
         out.innerHTML = render(
-          err.error === 'rate-limited'
-            ? 'That’s more questions than the free tier allows in a minute. Give it about a minute and ask again.'
-            : 'The assistant couldn’t be reached just now — your connection, or the model host. Try again in a moment.'
+          err.error === 'bad-key'
+            ? (err.detail || 'That provider key was rejected. Check it in Settings.')
+            : err.error === 'rate-limited'
+              ? 'That’s more questions than the quota allows in a minute. Give it about a minute and ask again.'
+              : 'The assistant couldn’t be reached just now — your connection, or the model host. Try again in a moment.'
         );
         finish();
         return;
@@ -485,5 +503,8 @@ const Assistant = (() => {
 
   $('#ai-btn')?.addEventListener('click', toggle);
 
-  return { open: openPanel, close, toggle, run, compare, probe };
+  // Lets Settings invalidate the cached probe when a key is added or removed.
+  const resetBackend = () => { backend = null; };
+
+  return { open: openPanel, close, toggle, run, compare, probe, resetBackend };
 })();

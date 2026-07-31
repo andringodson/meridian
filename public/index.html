@@ -318,6 +318,16 @@
       </div>
     </div>
     <div class="set-group">
+      <div class="set-label">Assistant · your own key</div>
+      <form class="key-row" id="ai-key-form" autocomplete="off">
+        <input id="ai-key" type="password" placeholder="Paste a provider key…" aria-label="Your AI provider key"
+               autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="200" />
+        <button class="set-btn" id="ai-key-save" type="submit">Save</button>
+        <button class="set-btn" id="ai-key-clear" type="button" hidden>Remove</button>
+      </form>
+      <p class="set-note" id="ai-key-note">Bring a key from any OpenAI-compatible provider and the assistant answers with it instead of the shared one. <a href="https://console.groq.com/keys" target="_blank" rel="noopener">Groq's free tier</a> needs no card. Stored on this device only, and sent to Meridian's own endpoint per question — never saved there.</p>
+    </div>
+    <div class="set-group">
       <div class="set-label">Semantic engine · on-device</div>
       <label class="tgl"><input type="checkbox" id="set-semantic" /> <span>Meaning-based search &amp; For You</span></label>
       <p class="set-note" id="semantic-note">Finds stories by meaning, not just matching words — “monetary policy” surfaces the rate-decision story. Runs entirely on your device; nothing is sent anywhere. One-time 7.5&nbsp;MB download.</p>

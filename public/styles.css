@@ -1465,3 +1465,17 @@ html.morphing .reader-panel, html.morphing .reader-backdrop { animation: none; }
   font: 700 10px var(--display); letter-spacing: .09em; text-transform: uppercase;
   color: var(--text-2); margin-right: 3px;
 }
+
+/* ---------- bring-your-own-key field ---------- */
+.key-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#ai-key {
+  flex: 1 1 180px; min-width: 0;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 9px 12px; font: 13px var(--body); outline: none;
+  transition: border-color .15s;
+}
+#ai-key::placeholder { color: var(--text-2); }
+#ai-key:focus { border-color: var(--accent); }
+#ai-key-note a { color: var(--accent-hi); }
+#ai-key-note a:hover { text-decoration: underline; }

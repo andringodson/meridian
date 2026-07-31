@@ -196,7 +196,7 @@ Variables) or in `.env.local` for `vercel dev`:
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
-| `AI_API_KEY` | yes | — | Provider key. Never sent to the browser. |
+| `AI_API_KEY` | no | — | Deployment-wide provider key. Never sent to the browser. Optional now: a reader can supply their own in Settings instead. |
 | `AI_BASE_URL` | no | `https://api.groq.com/openai/v1` | Any OpenAI-compatible endpoint. |
 | `AI_MODEL` | no | `llama-3.3-70b-versatile` | Open weights by default. |
 

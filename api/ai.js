@@ -59,6 +59,24 @@ const clientIp = (req) =>
   (req.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
   req.socket?.remoteAddress || 'anon';
 
+/* ---------- bring your own key ----------
+   A reader can supply their own provider key instead of using the deployment's.
+   It arrives per-request in a header, is used for that one upstream call, and
+   is never stored, logged or echoed back — there is nowhere in this file that
+   writes it anywhere.
+
+   The character class is not cosmetic: this value is interpolated into an
+   Authorization header, and a newline in it would let a caller inject arbitrary
+   headers into the upstream request. Anything outside the set is refused rather
+   than stripped, so a mangled key fails loudly instead of silently becoming a
+   different one. */
+function readerKey(req) {
+  const raw = String(req.headers['x-ai-key'] || '').trim();
+  if (!raw) return '';
+  if (raw.length > 200 || !/^[A-Za-z0-9._\-~+/=]+$/.test(raw)) return '';
+  return raw;
+}
+
 /* ---------- prompt construction ---------- */
 
 const str = (v, max) => (typeof v === 'string' ? v : '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -194,7 +212,9 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
-    res.status(200).json({ available: !!KEY, model: KEY ? MODEL : null });
+    // `byok` tells the client it can offer the key field: this route will
+    // accept a reader's own key even when the deployment has none configured.
+    res.status(200).json({ available: !!KEY, model: MODEL, byok: true });
     return;
   }
 
@@ -204,11 +224,14 @@ export default async function handler(req, res) {
     return;
   }
 
-  if (!KEY) {
+  // The reader's own key wins over the deployment's, so someone who supplies
+  // one is spending their own quota rather than the site's.
+  const key = readerKey(req) || KEY;
+  if (!key) {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.status(503).json({
       error: 'ai-unconfigured',
-      detail: 'Set AI_API_KEY in the deployment environment to enable the assistant.',
+      detail: 'Add your own provider key in Settings, or set AI_API_KEY in the deployment environment.',
     });
     return;
   }
@@ -238,7 +261,7 @@ export default async function handler(req, res) {
       signal: ctl.signal,
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${KEY}`,
+        Authorization: `Bearer ${key}`,
       },
       body: JSON.stringify({
         model: MODEL,
@@ -250,10 +273,24 @@ export default async function handler(req, res) {
     });
 
     if (!upstream.ok || !upstream.body) {
-      const detail = await upstream.text().catch(() => '');
-      // 429 upstream means the shared free-tier quota, not this reader.
-      const status = upstream.status === 429 ? 429 : 502;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
+      // A rejected key is the reader's to fix, and needs saying plainly rather
+      // than as a generic upstream failure. No upstream text is echoed here —
+      // an auth error body is the one most likely to quote what was sent.
+      if (upstream.status === 401 || upstream.status === 403) {
+        res.status(401).json({
+          error: 'bad-key',
+          detail: readerKey(req)
+            ? 'That provider key was rejected. Check it in Settings.'
+            : 'This deployment’s provider key was rejected.',
+        });
+        return;
+      }
+
+      const detail = await upstream.text().catch(() => '');
+      // 429 upstream means a quota — the reader's own if they supplied a key.
+      const status = upstream.status === 429 ? 429 : 502;
       res.status(status).json({
         error: status === 429 ? 'rate-limited' : 'upstream',
         detail: detail.slice(0, 300),

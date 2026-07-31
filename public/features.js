@@ -227,6 +227,7 @@ function openSheet() {
   const at = $('#set-autotranslate');
   if (at) at.checked = !!s.autoTranslate;
   renderVoicePicker();
+  renderKeyField();
   const nb = $('#set-neural');
   if (nb) nb.checked = !!s.neuralVoice;
   if (s.neuralVoice) renderNeuralVoices();
@@ -326,6 +327,46 @@ function renderVoicePicker() {
   }).join('');
   group.hidden = false;
 }
+/* ---------- assistant: bring your own key ----------
+   The stored value is never put back into the field. A password input still
+   exposes its value to anything that can read the DOM, and there is no reason
+   to re-render a secret the reader already has — the field shows a fixed mask
+   when one is saved, and typing over it replaces it. */
+function renderKeyField() {
+  const input = $('#ai-key');
+  const clear = $('#ai-key-clear');
+  if (!input) return;
+  const has = !!getSettings().aiKey;
+  input.value = '';
+  input.placeholder = has ? '•••••••••••••••• saved' : 'Paste a provider key…';
+  if (clear) clear.hidden = !has;
+}
+
+$('#ai-key-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const input = $('#ai-key');
+  const key = input.value.trim();
+  if (!key) { toast('Paste a key first'); return; }
+  // Refused rather than trimmed: a key with a stray character in it is a typo,
+  // and silently changing it produces a confusing rejection later.
+  if (!/^[A-Za-z0-9._\-~+/=]+$/.test(key)) { toast('That doesn’t look like a valid key'); return; }
+  saveSettings({ aiKey: key });
+  input.value = '';
+  renderKeyField();
+  // Re-probe so the badge stops saying "on-device" straight away.
+  if (typeof Assistant !== 'undefined') { Assistant.resetBackend?.(); await Assistant.probe(); }
+  toast('Key saved — the assistant will use it');
+});
+
+$('#ai-key-clear')?.addEventListener('click', async () => {
+  const s = getSettings();
+  delete s.aiKey;
+  localStorage.setItem(SET_KEY, JSON.stringify(s));
+  renderKeyField();
+  if (typeof Assistant !== 'undefined') { Assistant.resetBackend?.(); await Assistant.probe(); }
+  toast('Key removed');
+});
+
 /* ---------- neural voice (opt-in, on-device) ----------
    Mirrors the semantic engine's contract: a toggle that downloads once, reports
    its progress honestly, caches for offline use, and gives the bytes back when
