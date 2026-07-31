@@ -1,0 +1,71 @@
+# Meridian — publish the static mirror to GitHub Pages.
+#
+# Pages serves files, not functions, so the mirror cannot call /api/*. This
+# builds the site, freezes the feeds into JSON with scripts/snapshot.mjs, and
+# publishes the result. public/static-api.js points the client at those files
+# when it detects it is running on a functionless host.
+#
+# The mirror is a fallback, not a replacement: it is as fresh as the last run,
+# and reader extraction, search, weather and the assistant need the live site.
+#
+# Every two hours rather than every few minutes — each run fans out across a
+# dozen upstream newsroom feeds per category, and there is no reason to make
+# other people's servers pay for a mirror nobody is reading at 4am.
+
+name: pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 */2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A scheduled run and a push run must not race to publish; let the newer win.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the site
+        run: npm run build
+
+      - name: Freeze the API
+        run: npm run snapshot
+        # snapshot.mjs exits non-zero if it cannot gather enough categories, so
+        # a hollow mirror fails here rather than being published.
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -39,6 +39,10 @@
   <!-- Render-blocking on purpose and kept tiny: it stamps the palette class on
        <html> so the first paint is already the right theme. -->
   <script src="/theme.js"></script>
+  <!-- Inert on the real deployment; only a functionless host (GitHub Pages)
+       installs it, to point /api/* at the JSON snapshots. Must run before
+       app.js so the wrapper is in place for the first request. -->
+  <script src="/static-api.js"></script>
   <link rel="stylesheet" href="/styles.css" />
 
   <script type="application/ld+json">
