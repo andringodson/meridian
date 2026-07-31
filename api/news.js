@@ -489,10 +489,14 @@ function clusterStories(list) {
   return out.sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
 }
 
-export default async function handler(req, res) {
-  const category = String(req.query?.category || 'top').toLowerCase();
-  const edition = editionOf(req.query?.edition);
-  const feeds = feedsFor(category, edition);
+/* The aggregation, separated from the endpoint so other routes can reuse it
+   in-process. api/v1/stories.js serves the same work under a stable public
+   contract, and an internal HTTP hop to our own /api/news would double the
+   latency and the cold starts for nothing. */
+export async function aggregate({ category = 'top', edition: ed } = {}) {
+  const category_ = String(category || 'top').toLowerCase();
+  const edition = editionOf(ed);
+  const feeds = feedsFor(category_, edition);
 
   const results = await Promise.allSettled(feeds.map((f) => fetchText(f)));
   let articles = [];
@@ -576,10 +580,9 @@ export default async function handler(req, res) {
      seconds for a blank screen. An hour-wide stale window means they are served
      instantly from the edge while the refresh happens behind them — for a news
      feed, slightly-old-but-now beats current-in-seven-seconds. */
-  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=3600, stale-if-error=86400');
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.status(200).json({
-    category,
+  return {
+    cache: 's-maxage=60, stale-while-revalidate=3600, stale-if-error=86400',
+    category: category_,
     edition,
     editions: Object.fromEntries(Object.entries(EDITIONS).map(([k, v]) => [k, v.label])),
     count: articles.length,
@@ -588,5 +591,15 @@ export default async function handler(req, res) {
     publishers: Object.fromEntries(present),
     updatedAt: new Date().toISOString(),
     articles,
+  };
+}
+
+export default async function handler(req, res) {
+  const { cache, ...payload } = await aggregate({
+    category: req.query?.category,
+    edition: req.query?.edition,
   });
+  res.setHeader('Cache-Control', cache);
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.status(200).json(payload);
 }

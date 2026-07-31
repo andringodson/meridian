@@ -186,6 +186,50 @@ meridian/
 These return JSON and are cached at the edge (`s-maxage`) so upstream sources are
 never hammered. `/api/ai` is the exception: `no-store`, and streamed.
 
+## Public API
+
+Meridian's aggregation is available as a small public API. What makes it worth
+consuming rather than reading raw RSS is the two things done to the feeds:
+same-story clustering, so one event is one story rather than twelve
+near-duplicates, and provenance — where each newsroom is based and how it is
+funded, plus a reading of how concentrated the coverage is.
+
+```
+GET /api/v1                 discovery document
+GET /api/v1/stories         clustered stories with provenance
+GET /api/v1/publishers      the provenance registry
+```
+
+`/api/v1/stories` takes `category`, `edition` and `limit` (1–100, default 40):
+
+```bash
+curl 'https://meridian-andrin.vercel.app/api/v1/stories?category=world&limit=5'
+```
+
+Each story carries a `spread`:
+
+```json
+{
+  "outlets": 5,
+  "known": 4,
+  "countries": ["US", "GB"],
+  "funding": { "private": 3, "public": 1 },
+  "concentration": "broad"
+}
+```
+
+`known` is how many of those outlets have provenance on file — claims are only
+made over those, and `concentration` is `null` below three. **No left/right
+rating is published**, for the reason given at the top of `api/_publishers.js`:
+country and funding are matters of public record, political lean is contested,
+and shipping one would mean shipping someone else's judgement as though it were
+data.
+
+CORS-open, edge-cached, and rate limited to 60 requests per minute per address.
+Please cache — this proxies live newsroom feeds. Headlines, standfirsts and
+links only; article bodies are never republished, and every story links back to
+the newsroom that reported it.
+
 ## Assistant setup
 
 The assistant is optional. Without configuration the route answers `503
