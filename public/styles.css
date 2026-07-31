@@ -1479,3 +1479,62 @@ html.morphing .reader-panel, html.morphing .reader-backdrop { animation: none; }
 #ai-key:focus { border-color: var(--accent); }
 #ai-key-note a { color: var(--accent-hi); }
 #ai-key-note a:hover { text-decoration: underline; }
+
+/* ---------- the top bar on a phone ----------
+   Measured at 390px: .topbar-right came to 569px, which put Refresh entirely
+   off-screen and clipped Settings in half. Settings is the only route to the
+   theme, the voices, translation and the assistant key, so on a phone the app's
+   entire configuration was unreachable. It overflowed before the assistant
+   button was added and that button made it worse; either way it needs to fit.
+
+   body has overflow-x:hidden, which is exactly why this went unnoticed — there
+   was no scrollbar to see, the controls were simply gone. */
+@media (max-width: 700px) {
+  .topbar { gap: 10px; padding: 12px 14px; }
+  .topbar-right { gap: 8px; flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
+  /* The pulsing dot still reports staleness; the word beside it costs ~60px to
+     say what the dot already says. */
+  .live-label { display: none; }
+  .search { flex: 1 1 auto; min-width: 0; }
+  .search input { width: 100%; min-width: 0; }
+}
+@media (max-width: 480px) {
+  /* Pull-to-refresh covers this on touch, and the palette still lists it. */
+  #refresh { display: none; }
+  /* The mark carries the brand at this width. */
+  .brand-name { display: none; }
+}
+
+/* ---------- touch targets ----------
+   The category pills came out 31px tall and the Listen button 28px. Both are
+   under a fingertip. Only coarse pointers pay the extra height, so the desktop
+   layout is untouched. */
+@media (pointer: coarse) {
+  .tab { padding: 9px 15px; }
+  .listen, .rtab { padding: 8px 13px; }
+  .act { padding: 7px 9px; }
+  .brand { padding: 3px 0; }
+}
+
+/* Icon buttons must never be squeezed. Giving .topbar-right flex:1 so the
+   search box could absorb the leftover width also made these shrinkable, and
+   they came out 30px wide instead of 36 — narrower than they are tall, on the
+   two controls that open the assistant and every setting. */
+.icon-btn, .wx, .btn-ghost { flex: none; }
+
+@media (pointer: coarse) {
+  /* Card save/share, topic chips and the history-strand tabs were all 28-31px.
+     These are the small round controls a thumb actually has to find. */
+  .act { padding: 9px 10px; }
+  .tchip { padding: 9px 14px; }
+  .rtab { padding: 9px 13px; }
+  .seg button { padding: 9px 14px; }
+  .cov-compare { padding: 8px 12px; }
+}
+
+@media (pointer: coarse) {
+  /* The two dropdowns came out 31px. A native select is a real tap target. */
+  #set-voice, #set-translate-to { padding: 9px 10px; }
+  /* The bare mark is only 26px wide once the wordmark is hidden. */
+  .brand { padding: 3px 6px; margin-left: -6px; }
+}
