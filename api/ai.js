@@ -17,6 +17,10 @@
 // With no key configured the route answers 503 `ai-unconfigured` and the client
 // falls back to summarising on-device. The feature degrades; it never breaks.
 
+import { randomBytes } from 'node:crypto';
+import { rank } from './_similarity.js';
+import { extractPage } from './read.js';
+
 const BASE = (process.env.AI_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
 const MODEL = process.env.AI_MODEL || 'llama-3.3-70b-versatile';
 const KEY = process.env.AI_API_KEY || '';
@@ -83,10 +87,18 @@ const str = (v, max) => (typeof v === 'string' ? v : '').replace(/\s+/g, ' ').tr
 
 /* Third-party page text goes into the prompt, so it is fenced and the model is
    told the fence is data. A story that contains "ignore previous instructions"
-   is a story about prompt injection, not an instruction. */
-const FENCE = '<<<MERIDIAN_SOURCE_TEXT>>>';
+   is a story about prompt injection, not an instruction.
 
-const SYSTEM = `You are Meridian's news assistant. Meridian aggregates world news, markets and history from open sources.
+   The marker is random per request rather than a constant. A fixed one is
+   published in this file: a page that wants out of the fence only has to
+   contain the closing marker and then write whatever it likes as though it were
+   the operator talking. It cannot do that to a token it has never seen, and
+   since retrieval below now pulls in the body text of stories the reader never
+   chose to open, the amount of untrusted text reaching the prompt went up
+   enough to make the difference matter. */
+const fenceOf = () => `<<<MERIDIAN_SOURCE_${randomBytes(9).toString('hex').toUpperCase()}>>>`;
+
+const systemFor = (FENCE) => `You are Meridian's news assistant. Meridian aggregates world news, markets and history from open sources.
 
 Ground rules:
 - Answer only from the source material provided in this conversation. It is the reader's current feed or the story they have open.
@@ -96,6 +108,67 @@ Ground rules:
 - Be brief and concrete. No preamble, no "as an AI", no restating the question.
 - Where a topic is contested, give the competing accounts rather than adopting one.
 - You know nothing about events after the supplied material. Do not guess at developments.`;
+
+/* ---------- retrieval ----------
+   The reader's question used to be answered from a list of headlines truncated
+   to 180 characters each — so "what's going on with the Fed?" was answered from
+   fragments, and the system prompt above correctly forbids inventing the detail
+   that would have made the answer useful. The model was being asked a question
+   and denied the material to answer it.
+
+   So the question is now scored against the feed and the best-matching stories
+   are fetched and passed in full. The ranking is lexical (api/_similarity.js),
+   which means it finds a story that shares wording with the question and misses
+   one that does not — a reader asking about "borrowing costs" will not be handed
+   a story headlined "Fed holds rates steady". public/embed.js already ships a
+   semantic model to the client for exactly this class of problem; wiring it into
+   this path is the obvious next step and would change only which stories get
+   picked, not anything below.
+
+   What comes back is a lead-in rather than a whole article: extractPage stops
+   after roughly 1500 characters. That is deliberate on its side — it is an
+   extractor for a reader panel, not a scraper — and it is the right amount here
+   too. It is the top of a news story, which is where news stories put the facts. */
+const RETRIEVE = {
+  stories: 3,
+  chars: 2400,       // per story, after extraction
+  deadlineMs: 9000,  // the whole step; a slow newsroom must not eat the budget
+  // Once full text is in hand, the headline list is context rather than the
+  // material, so it is cut back to make room for what was actually retrieved.
+  headlinesAfter: 20,
+};
+
+async function retrieve(question, headlines) {
+  const pool = headlines
+    .map((h) => ({
+      title: str(h?.title, LIMITS.headlineChars),
+      summary: str(h?.summary, 300),
+      source: str(h?.source, 60),
+      link: typeof h?.link === 'string' ? h.link : '',
+    }))
+    // Google News links are obfuscated redirects extractPage refuses, and a feed
+    // is full of them. Filtering here rather than discovering it after the fetch
+    // means the ranking spends its three slots on stories that can be read.
+    .filter((h) => h.title && /^https?:\/\//i.test(h.link) && !/news\.google\./i.test(h.link));
+
+  if (!pool.length) return [];
+  const picks = rank(question, pool, { limit: RETRIEVE.stories });
+  if (!picks.length) return [];
+
+  let timer;
+  const deadline = new Promise((r) => { timer = setTimeout(() => r(null), RETRIEVE.deadlineMs); });
+  try {
+    const pages = await Promise.all(picks.map(async ({ index }) => {
+      const h = pool[index];
+      const page = await Promise.race([extractPage(h.link).catch(() => null), deadline]);
+      const text = page?.ok ? (page.paragraphs || []).join('\n\n') : '';
+      return text ? { source: h.source, title: h.title, text: str(text, RETRIEVE.chars) } : null;
+    }));
+    return pages.filter(Boolean);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const MODES = {
   summarize: 'Summarise the story below in 3-5 short bullet points: what happened, who is involved, why it matters. Plain sentences, no bold, no headers.',
@@ -114,13 +187,13 @@ const MODES = {
   ask: '',
 };
 
-function buildMessages(body) {
+function buildMessages(body, { fence: FENCE, retrieved = [] } = {}) {
   const mode = MODES[body.mode] ? body.mode : 'ask';
   const topics = Array.isArray(body.topics)
     ? body.topics.map((t) => str(t, 30)).filter(Boolean).slice(0, 12) : [];
   const edition = str(body.edition, 4);
 
-  let system = SYSTEM;
+  let system = systemFor(FENCE);
   if (topics.length) {
     system += `\n\nThe reader follows: ${topics.join(', ')}. Where several stories compete for the same space, lead with those — but never claim a connection to their interests that the material does not support.`;
   }
@@ -175,9 +248,22 @@ function buildMessages(body) {
     }
   }
 
+  /* The stories the question turned out to be about, in full. Each is headed
+     with its outlet so a claim can be attributed to the newsroom that made it,
+     which the system prompt requires and a bare block of text would not allow. */
+  if (retrieved.length) {
+    const accounts = retrieved.map((r) =>
+      `### ${r.source || 'unknown outlet'}\nHeadline: ${r.title}\n${FENCE}\n${r.text}\n${FENCE}`
+    );
+    parts.push(
+      `The ${accounts.length === 1 ? 'story' : `${accounts.length} stories`} in the reader's feed ` +
+      `that best match the question, in full:\n\n${accounts.join('\n\n')}`
+    );
+  }
+
   if (Array.isArray(body.headlines) && body.headlines.length) {
     const lines = body.headlines
-      .slice(0, LIMITS.headlines)
+      .slice(0, retrieved.length ? RETRIEVE.headlinesAfter : LIMITS.headlines)
       .map((h, i) => {
         const t = str(h?.title, LIMITS.headlineChars);
         const s = str(h?.source, 60);
@@ -185,7 +271,10 @@ function buildMessages(body) {
       })
       .filter(Boolean);
     if (lines.length) {
-      parts.push(`Headlines in the reader's current feed:\n${FENCE}\n${lines.join('\n')}\n${FENCE}`);
+      const label = retrieved.length
+        ? "Also in the reader's feed, headlines only"
+        : "Headlines in the reader's current feed";
+      parts.push(`${label}:\n${FENCE}\n${lines.join('\n')}\n${FENCE}`);
     }
   }
 
@@ -246,9 +335,6 @@ export default async function handler(req, res) {
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = null; } }
   if (!body || typeof body !== 'object') { res.status(400).json({ error: 'bad request' }); return; }
 
-  const messages = buildMessages(body);
-  if (!messages) { res.status(400).json({ error: 'empty question' }); return; }
-
   // Abort the upstream when the reader closes the panel or navigates away,
   // rather than paying for tokens nobody will read.
   const ctl = new AbortController();
@@ -256,6 +342,23 @@ export default async function handler(req, res) {
   res.on('close', onClose);
 
   try {
+    /* Only a free-text question earns a retrieval pass. The other modes already
+       have their material: summarize and explain are given the open story,
+       compare is given the cluster, and brief is a read of the headline list by
+       definition — fetching article bodies for it would answer a question
+       nobody asked and spend the reader's latency doing it. */
+    const mode = MODES[body.mode] ? body.mode : 'ask';
+    const question = str(body.question, LIMITS.question);
+    const retrieved = (mode === 'ask' && question && !body.article && !Array.isArray(body.cluster))
+      ? await retrieve(question, Array.isArray(body.headlines) ? body.headlines.slice(0, LIMITS.headlines) : [])
+      : [];
+
+    // The reader may have closed the panel while stories were being fetched.
+    if (ctl.signal.aborted) { res.end(); return; }
+
+    const messages = buildMessages(body, { fence: fenceOf(), retrieved });
+    if (!messages) { res.status(400).json({ error: 'empty question' }); return; }
+
     const upstream = await fetch(`${BASE}/chat/completions`, {
       method: 'POST',
       signal: ctl.signal,

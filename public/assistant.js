@@ -43,9 +43,18 @@ const Assistant = (() => {
     };
   }
 
+  /* The link and the standfirst ride along with the headline so the server can
+     rank the feed against a question and fetch the few stories it turns out to
+     be about — see the retrieval note in api/ai.js. Without the link there is
+     nothing to fetch, and the assistant is answering from headlines alone. */
   function feedHeadlines() {
     const arts = (typeof currentArticles !== 'undefined' && currentArticles) || [];
-    return arts.slice(0, MAX_HEADLINES).map((a) => ({ title: a.title, source: a.source }));
+    return arts.slice(0, MAX_HEADLINES).map((a) => ({
+      title: a.title,
+      source: a.source,
+      link: a.link,
+      summary: a.summary,
+    }));
   }
 
   const topics = () => {

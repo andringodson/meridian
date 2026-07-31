@@ -4,6 +4,7 @@
 // so the site stays fresh on its own without hammering upstreams.
 import { XMLParser } from 'fast-xml-parser';
 import { identify, PUBLISHERS } from './_publishers.js';
+import { vectorSpace } from './_similarity.js';
 
 const GN = 'https://news.google.com/rss';
 const gnTopic = (id) =>
@@ -434,41 +435,14 @@ const keyOf = (a) =>
       story off the feed entirely, the worst failure this pass has. Requiring the
       average similarity across every member to clear the bar refuses that merge,
       because the two disputes are not similar to each other. */
-const STOP = new Set((
-  'the a an of to in on for and with as at by after over from is are be has ' +
-  'have it its his her their new says say said will was were this that not ' +
-  'no but up out how what why who more than into about amid against could would'
-).split(' '));
+/* Cosine over the tf-idf vectors, from api/_similarity.js — the same scoring the
+   assistant uses to decide which stories a question is about, so the two cannot
+   disagree about what "related" means.
 
-// Length is a crude proxy for "carries meaning". It holds for alphabetic
-// scripts; CJK, where a word is one or two characters, would need segmentation
-// this does not attempt.
-function sigTokens(text) {
-  const set = new Set();
-  for (const w of String(text).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(/\s+/)) {
-    if (w.length > 3 && !STOP.has(w)) set.add(w);
-  }
-  return set;
-}
-
-/* The summary says the same thing in other words, which is precisely the
-   evidence missing when two newsrooms word a headline differently. It is
-   discounted rather than trusted equally: it is longer, so proportionally more
-   of it is incidental vocabulary. */
-const TITLE_W = 1;
-const SUMMARY_W = 0.4;
-
-function weigh(a) {
-  const m = new Map();
-  for (const w of sigTokens(a.title)) m.set(w, TITLE_W);
-  if (a.summary) for (const w of sigTokens(a.summary)) if (!m.has(w)) m.set(w, SUMMARY_W);
-  return m;
-}
-
-/* Cosine over the tf-idf vectors. Cosine rather than share-of-vocabulary
-   because it is the shared weight that decides, not the shared word count: two
-   headlines agreeing on the three words that identify the event score highly
-   even where one of them carries a clause of detail the other does not.
+   Cosine rather than share-of-vocabulary because it is the shared weight that
+   decides, not the shared word count: two headlines agreeing on the three words
+   that identify the event score highly even where one carries a clause of detail
+   the other does not.
 
    0.32 comes off the curve in scripts/eval-cluster.mjs (`npm run eval:cluster --
    --sweep`), and it is not the highest-precision setting available. Anything
@@ -486,36 +460,8 @@ export function clusterStories(list, { threshold = MERGE_MIN } = {}) {
   const n = list.length;
   if (n < 2) return list.slice();
 
-  const local = list.map(weigh);
-
-  const df = new Map();
-  for (const m of local) for (const w of m.keys()) df.set(w, (df.get(w) || 0) + 1);
-
-  const weights = local.map((m) => {
-    const out = new Map();
-    for (const [w, lw] of m) out.set(w, lw * Math.log((n + 1) / (df.get(w) + 0.5)));
-    return out;
-  });
-  const norm = weights.map((m) => {
-    let s = 0;
-    for (const v of m.values()) s += v * v;
-    return Math.sqrt(s);
-  });
-
-  const score = (i, j) => {
-    const a = weights[i], b = weights[j];
-    const [small, big] = a.size <= b.size ? [a, b] : [b, a];
-    let dot = 0, count = 0;
-    for (const [w, wa] of small) {
-      const wb = big.get(w);
-      if (wb === undefined) continue;
-      dot += wa * wb;
-      count++;
-    }
-    if (count < MIN_SHARED) return 0;
-    const d = norm[i] * norm[j];
-    return d > 0 ? dot / d : 0;
-  };
+  const { local, df, cosine } = vectorSpace(list);
+  const score = (i, j) => cosine(i, j, MIN_SHARED);
 
   /* Candidates come from a token index so the pass stays near-linear instead of
      comparing every pair. Tokens carried by a large share of the batch are left
