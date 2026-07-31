@@ -434,7 +434,7 @@ neuralBox()?.addEventListener('change', async (e) => {
     saveSettings({ neuralVoice: false });
     try { await TTS.forget(); } catch { /* nothing stored */ }
     $('#neural-voices')?.setAttribute('hidden', '');
-    setNeuralNote('Off — spoken stories use your system voice. Turning this on downloads 39 MB once.');
+    setNeuralNote('Off — spoken stories use your system voice. Turning this on downloads about 27 MB once.');
   }
 });
 

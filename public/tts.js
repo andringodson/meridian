@@ -10,7 +10,9 @@
  * `'wasm-unsafe-eval'` in script-src, without which no WebAssembly runtime can
  * compile at all.
  *
- * The download is ~39MB and is kept in the Cache API rather than left to the
+ * The files total 41MB unpacked but travel as ~27MB — Vercel serves them
+ * brotli-compressed, and the ONNX runtime alone drops 13MB to 3MB. They are kept
+ * in the Cache API rather than left to the
  * HTTP cache, so it survives eviction, works offline, and is not silently
  * re-charged to the reader on the next deploy. Same arrangement as the semantic
  * model in embed.js.

@@ -78,7 +78,7 @@ connection at all.
   summarising instead of disappearing. See [Assistant setup](#assistant-setup).
 - **A neural voice, on your device** — optional. Your system's own voices are
   the default and Meridian now lets you pick the best one it has, which for most
-  people is enough. Where it isn't, a 39 MB opt-in download brings
+  people is enough. Where it isn't, a ~27 MB opt-in download brings
   [KittenTTS](https://github.com/KittenML/KittenTTS) nano (Apache-2.0) into the
   browser on ONNX Runtime: eight voices, entirely local, cached for offline,
   and given back when switched off. Every byte is served from this origin, so
