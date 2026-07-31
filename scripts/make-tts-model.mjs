@@ -154,6 +154,10 @@ async function main() {
     vocabSource: VOCAB_REPO,
     inputs: ['input_ids', 'style', 'speed'],
     outputs: ['waveform', 'duration'],
+    /* Recorded because the CDN does not always send Content-Length — the large
+       files come back chunked, which leaves a download with no denominator and
+       a progress bar frozen at whatever it last showed. These are the fallback. */
+    sizes: { 'model.onnx': onnx.length, 'voices.bin': blob.length },
     bytes: onnx.length + blob.length + wasmSize + glueSize,
   }, null, 2), 'utf8');
 

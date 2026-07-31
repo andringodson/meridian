@@ -24,5 +24,9 @@
     "waveform",
     "duration"
   ],
+  "sizes": {
+    "model.onnx": 24369971,
+    "voices.bin": 3276800
+  },
   "bytes": 41150929
 }

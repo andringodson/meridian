@@ -34,7 +34,7 @@ const TTS = (() => {
 
   /* ---------- fetching, with progress ---------- */
 
-  async function cached(url, onProgress) {
+  async function cached(url, onProgress, expected = 0) {
     const cache = await caches.open(CACHE).catch(() => null);
     if (cache) {
       const hit = await cache.match(url);
@@ -44,7 +44,10 @@ const TTS = (() => {
     if (!res.ok) throw new Error(`${res.status} for ${url}`);
 
     // Stream so the reader sees movement on a 23MB file rather than a stall.
-    const total = +(res.headers.get('content-length') || 0);
+    // Content-Length is not guaranteed — the CDN serves the large files chunked,
+    // and without a denominator the bar would freeze for the whole download. The
+    // size recorded in meta.json at build time stands in.
+    const total = +(res.headers.get('content-length') || 0) || expected;
     if (!onProgress || !res.body?.getReader || !total) {
       const buf = await res.arrayBuffer();
       if (cache) await cache.put(url, new Response(buf)).catch(() => {});
@@ -97,10 +100,11 @@ const TTS = (() => {
         await cached(`${BASE}vocab.json`)));
       onProgress(0.06, 'runtime');
 
-      const styleBuf = await cached(`${BASE}voices.bin`, step('voices', 0.08, 0.06));
+      const sizes = meta.sizes || {};
+      const styleBuf = await cached(`${BASE}voices.bin`, step('voices', 0.08, 0.06), sizes['voices.bin']);
       styles = new Float32Array(styleBuf);
 
-      const modelBuf = await cached(`${BASE}model.onnx`, step('model', 0.84, 0.14));
+      const modelBuf = await cached(`${BASE}model.onnx`, step('model', 0.84, 0.14), sizes['model.onnx']);
       onProgress(0.98, 'starting');
 
       const { ort } = self.TTSRuntime;
