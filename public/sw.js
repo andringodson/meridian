@@ -1,7 +1,7 @@
 /* Meridian service worker — app-shell offline support.
    Shell: network-first (deploys apply on next load), cache fallback offline.
    Live API: network-first. */
-const SHELL = 'meridian-shell-v32';
+const SHELL = 'meridian-shell-v33';
 const STATE = 'meridian-state'; // tiny key-value store; survives shell upgrades
 // The opt-in semantic model is 7.5MB the reader chose to download. It lives in
 // its own cache (written by embed.js) and must outlive shell upgrades, or every
@@ -10,10 +10,13 @@ const MODEL = 'meridian-model-v1';
 // Saved stories keep their extracted text and hero image here so the reading
 // queue survives a lost connection — and a deploy.
 const READING = 'meridian-reading-v1';
-const KEEP = [SHELL, STATE, MODEL, READING];
+// The opt-in neural voice: ~39MB the reader chose to download. Same reasoning
+// as MODEL above — it must outlive shell upgrades or every deploy re-bills it.
+const TTS = 'meridian-tts-v1';
+const KEEP = [SHELL, STATE, MODEL, READING, TTS];
 // theme.js is render-blocking in <head>: if it were ever missing offline the
 // shell would paint with the markup's fallback theme, so it belongs here.
-const ASSETS = ['/', '/index.html', '/styles.css', '/theme.js', '/app.js', '/fluid.js', '/features.js', '/embed.js', '/assistant.js', '/readaloud.js', '/translate.js', '/pointer.js', '/palette.js', '/share-open.js', '/fonts/space-grotesk-latin.woff2', '/logo.svg', '/manifest.webmanifest', '/icons/icon.svg'];
+const ASSETS = ['/', '/index.html', '/styles.css', '/theme.js', '/app.js', '/fluid.js', '/features.js', '/embed.js', '/assistant.js', '/readaloud.js', '/translate.js', '/pointer.js', '/palette.js', '/share-open.js', '/tts.js', '/fonts/space-grotesk-latin.woff2', '/logo.svg', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

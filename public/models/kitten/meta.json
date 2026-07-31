@@ -1,0 +1,28 @@
+{
+  "model": "KittenML/kitten-tts-nano-0.8-int8",
+  "licence": "Apache-2.0",
+  "sampleRate": 24000,
+  "voices": [
+    "expr-voice-2-f",
+    "expr-voice-2-m",
+    "expr-voice-3-f",
+    "expr-voice-3-m",
+    "expr-voice-4-f",
+    "expr-voice-4-m",
+    "expr-voice-5-f",
+    "expr-voice-5-m"
+  ],
+  "styleRows": 400,
+  "styleDims": 256,
+  "vocabSource": "onnx-community/kitten-tts-nano-0.1-ONNX",
+  "inputs": [
+    "input_ids",
+    "style",
+    "speed"
+  ],
+  "outputs": [
+    "waveform",
+    "duration"
+  ],
+  "bytes": 41150929
+}

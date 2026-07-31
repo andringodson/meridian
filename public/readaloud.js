@@ -189,9 +189,45 @@ const ReadAloud = (() => {
   }
   function stopKeepAlive() { if (keepAlive) { clearInterval(keepAlive); keepAlive = null; } }
 
+  /* ---------- neural path ----------
+     The optional on-device model (tts.js) synthesises a paragraph at a time.
+     It gives no boundary events, so the word highlight belongs to the platform
+     voice alone; here the paragraph marker carries the reader's place. That is
+     an honest trade rather than a gap — the model returns a finished waveform,
+     not a stream, so there is nothing to hang a word on without deriving
+     timings from its `duration` output, which is a separate piece of work. */
+  const neuralOn = () => {
+    try {
+      return typeof TTS !== 'undefined' && TTS.ready &&
+        !!(JSON.parse(localStorage.getItem('meridian-settings')) || {}).neuralVoice;
+    } catch { return false; }
+  };
+
+  async function speakNeural(i) {
+    if (!speaking) return;
+    if (i >= paras.length) { stop(); toast('Finished reading'); return; }
+    idx = i;
+    paintParagraph(i);
+    const token = ++neuralToken;
+    try {
+      const s = JSON.parse(localStorage.getItem('meridian-settings')) || {};
+      const wave = await TTS.synth(paras[i].text, { voice: s.neuralVoiceName, speed: rate });
+      if (token !== neuralToken || !speaking) return;
+      await TTS.play(wave);
+      if (token !== neuralToken || !speaking) return;
+      speakNeural(i + 1);
+    } catch (e) {
+      if (token !== neuralToken) return;
+      stop();
+      toast('The neural voice failed — falling back next time');
+    }
+  }
+  let neuralToken = 0;
+
   function speakFrom(i) {
     if (!speaking) return;
     if (i >= paras.length) { stop(); toast('Finished reading'); return; }
+    if (neuralOn()) { speakNeural(i); return; }
     idx = i;
     paintParagraph(i);
 
@@ -232,7 +268,9 @@ const ReadAloud = (() => {
   function stop() {
     speaking = false;
     paused = false;
+    neuralToken++;                       // orphan any in-flight synthesis
     stopKeepAlive();
+    try { if (typeof TTS !== 'undefined') TTS.stop(); } catch { /* not loaded */ }
     speechSynthesis.cancel();
     clearPaint();
     setLabel('Listen', false);

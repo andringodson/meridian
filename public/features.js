@@ -227,6 +227,9 @@ function openSheet() {
   const at = $('#set-autotranslate');
   if (at) at.checked = !!s.autoTranslate;
   renderVoicePicker();
+  const nb = $('#set-neural');
+  if (nb) nb.checked = !!s.neuralVoice;
+  if (s.neuralVoice) renderNeuralVoices();
   const nBox = $('#set-notify');
   if (nBox) nBox.checked = !!s.notify && 'Notification' in window && Notification.permission === 'granted';
   sheetEl.hidden = false; backdropEl.hidden = false;
@@ -323,6 +326,77 @@ function renderVoicePicker() {
   }).join('');
   group.hidden = false;
 }
+/* ---------- neural voice (opt-in, on-device) ----------
+   Mirrors the semantic engine's contract: a toggle that downloads once, reports
+   its progress honestly, caches for offline use, and gives the bytes back when
+   switched off. */
+const neuralBox = () => $('#set-neural');
+const neuralNote = () => $('#neural-note');
+
+const NEURAL_NAMES = {
+  'expr-voice-2-f': 'Bella', 'expr-voice-2-m': 'Jasper',
+  'expr-voice-3-f': 'Luna', 'expr-voice-3-m': 'Bruno',
+  'expr-voice-4-f': 'Rosie', 'expr-voice-4-m': 'Hugo',
+  'expr-voice-5-f': 'Kiki', 'expr-voice-5-m': 'Leo',
+};
+
+function setNeuralNote(msg, busy = false) {
+  const el = neuralNote();
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.toggle('is-busy', busy);
+}
+
+function renderNeuralVoices() {
+  const wrap = $('#neural-voices');
+  if (!wrap || typeof TTS === 'undefined' || !TTS.ready) { if (wrap) wrap.hidden = true; return; }
+  const chosen = getSettings().neuralVoiceName || TTS.voices()[0];
+  wrap.innerHTML = TTS.voices().map((v) =>
+    `<button class="set-btn${v === chosen ? ' on' : ''}" data-voice="${esc(v)}">${esc(NEURAL_NAMES[v] || v)}</button>`).join('');
+  wrap.hidden = false;
+}
+$('#neural-voices')?.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-voice]');
+  if (!b) return;
+  saveSettings({ neuralVoiceName: b.dataset.voice });
+  renderNeuralVoices();
+  toast(`Neural voice: ${NEURAL_NAMES[b.dataset.voice] || b.dataset.voice}`);
+});
+
+async function enableNeural() {
+  if (typeof TTS === 'undefined') { setNeuralNote('Not available in this browser.'); return false; }
+  if (TTS.ready) { renderNeuralVoices(); return true; }
+  try {
+    await TTS.load((p, stage) => {
+      const pct = Math.round(p * 100);
+      setNeuralNote(stage === 'ready' ? 'Ready — running on your device.'
+        : `Downloading the voice — ${pct}%. One time, then it works offline.`, stage !== 'ready');
+    });
+    setNeuralNote(`Ready — ${TTS.voices().length} voices, running entirely on your device.`);
+    renderNeuralVoices();
+    toast('Neural voice ready');
+    return true;
+  } catch {
+    setNeuralNote('Couldn’t load the voice. Check your connection and try again.');
+    const box = neuralBox();
+    if (box) box.checked = false;
+    saveSettings({ neuralVoice: false });
+    return false;
+  }
+}
+
+neuralBox()?.addEventListener('change', async (e) => {
+  if (e.target.checked) {
+    saveSettings({ neuralVoice: true });
+    await enableNeural();
+  } else {
+    saveSettings({ neuralVoice: false });
+    try { await TTS.forget(); } catch { /* nothing stored */ }
+    $('#neural-voices')?.setAttribute('hidden', '');
+    setNeuralNote('Off — spoken stories use your system voice. Turning this on downloads 39 MB once.');
+  }
+});
+
 $('#set-voice')?.addEventListener('change', (e) => {
   saveSettings({ voiceURI: e.target.value });
   const name = e.target.options[e.target.selectedIndex]?.text.replace(/^★ /, '').split(' — ')[0];

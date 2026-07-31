@@ -3,7 +3,7 @@
 // keep resolving), minifying JS/CSS with esbuild and HTML with
 // html-minifier-terser. Everything else (fonts, images, manifest…) is copied
 // verbatim. Vercel runs this as the build step; dist/ is the served output.
-import { readdir, readFile, writeFile, mkdir, rm, copyFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile, mkdir, rm, copyFile, stat } from 'node:fs/promises';
 import { join, extname, dirname, relative } from 'node:path';
 import * as esbuild from 'esbuild';
 import { minify as minifyHtml } from 'html-minifier-terser';
@@ -33,8 +33,39 @@ const HTML_OPTS = {
 
 const kb = (n) => `${(n / 1024).toFixed(1)}KB`;
 
+/* The one bundled artefact. public/ is otherwise a set of classic scripts that
+   are only minified, but ONNX Runtime and the phonemiser are ESM packages with
+   their own dependency graphs and cannot join that world unbundled. This turns
+   src/tts-runtime.mjs into an IIFE that public/ can load like any other script.
+
+   It writes into public/ rather than straight to dist/ so the committed tree is
+   what actually ships, and so `npm run preview` serves the same bytes as
+   production. */
+async function bundleRuntime() {
+  const entry = 'src/tts-runtime.mjs';
+  try { await stat(entry); } catch { return null; }   // optional — model not vendored
+  const out = join(SRC, 'tts-runtime.js');
+  await esbuild.build({
+    entryPoints: [entry],
+    outfile: out,
+    bundle: true,
+    format: 'iife',
+    platform: 'browser',
+    target: ['es2020'],
+    minify: true,
+    legalComments: 'none',
+    // ORT ships a Node build behind the same specifier; keep it out of the
+    // browser bundle, along with the node builtins it reaches for.
+    external: ['onnxruntime-node', 'node:*', 'fs', 'path', 'os', 'crypto', 'worker_threads'],
+    define: { 'process.env.NODE_ENV': '"production"' },
+  });
+  return (await stat(out)).size;
+}
+
 async function build() {
   const t0 = Date.now();
+  const runtimeBytes = await bundleRuntime();
+  if (runtimeBytes) console.log(`  bundled tts-runtime.js — ${kb(runtimeBytes)}`);
   await rm(OUT, { recursive: true, force: true });
   const files = await walk(SRC);
   let before = 0, after = 0, min = 0;
