@@ -568,7 +568,15 @@ export default async function handler(req, res) {
   ).size;
 
   // Edge-cache: fresh within 60s, serve slightly stale while revalidating.
-  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=600, stale-if-error=86400');
+  /* s-maxage keeps the busy categories a minute fresh. The long
+     stale-while-revalidate is for the quiet ones: this endpoint fans out to a
+     dozen upstream feeds, and a genuinely cold miss was measured at 0.85–6.7
+     seconds. At the old 600s window a section nobody had opened for eleven
+     minutes went fully cold, so a reader clicking World waited the full seven
+     seconds for a blank screen. An hour-wide stale window means they are served
+     instantly from the edge while the refresh happens behind them — for a news
+     feed, slightly-old-but-now beats current-in-seven-seconds. */
+  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=3600, stale-if-error=86400');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.status(200).json({
     category,
