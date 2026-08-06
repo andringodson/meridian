@@ -1,7 +1,7 @@
 /* Meridian service worker — app-shell offline support.
    Shell: network-first (deploys apply on next load), cache fallback offline.
    Live API: network-first. */
-const SHELL = 'meridian-shell-v33';
+const SHELL = 'meridian-shell-v34';
 const STATE = 'meridian-state'; // tiny key-value store; survives shell upgrades
 // The opt-in semantic model is 7.5MB the reader chose to download. It lives in
 // its own cache (written by embed.js) and must outlive shell upgrades, or every
@@ -16,7 +16,12 @@ const TTS = 'meridian-tts-v1';
 const KEEP = [SHELL, STATE, MODEL, READING, TTS];
 // theme.js is render-blocking in <head>: if it were ever missing offline the
 // shell would paint with the markup's fallback theme, so it belongs here.
-const ASSETS = ['/', '/index.html', '/styles.css', '/theme.js', '/app.js', '/fluid.js', '/features.js', '/embed.js', '/assistant.js', '/readaloud.js', '/translate.js', '/pointer.js', '/palette.js', '/share-open.js', '/tts.js', '/fonts/space-grotesk-latin.woff2', '/logo.svg', '/manifest.webmanifest', '/icons/icon.svg'];
+//
+// Paths are relative so the same worker installs at the domain root on Vercel
+// and under /meridian/ on GitHub Pages, where absolute ones 404. addAll is
+// all-or-nothing: a single missing file rejects it and fails the install, which
+// takes the entire offline shell with it.
+const ASSETS = ['./', './index.html', './styles.css', './theme.js', './app.js', './fluid.js', './features.js', './embed.js', './assistant.js', './readaloud.js', './translate.js', './pointer.js', './palette.js', './share-open.js', './static-api.js', './tts.js', './fonts/space-grotesk-latin.woff2', './logo.svg', './manifest.webmanifest', './icons/icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -28,6 +33,13 @@ self.addEventListener('activate', (e) => {
       .then(() => self.clients.claim())
   );
 });
+
+/* Where this deployment is rooted: '/' on Vercel, '/meridian/' on GitHub Pages.
+   Every path test below is written against it, because a project Pages site
+   prefixes everything — an absolute '/models/' test simply never matches there,
+   and the 7.5MB model the reader opted into would be stored a second time in
+   the shell cache as a result. */
+const BASE = new URL('./', self.location).pathname;
 
 self.addEventListener('fetch', (e) => {
   const { request } = e;
@@ -53,20 +65,20 @@ self.addEventListener('fetch', (e) => {
   }
 
   // Live data: network-first, no long-term caching.
-  if (url.pathname.startsWith('/api/')) {
+  if (url.pathname.startsWith(`${BASE}api/`)) {
     e.respondWith(fetch(request).catch(() => caches.match(request)));
     return;
   }
 
   // Model weights manage their own cache in embed.js — passing them through the
   // shell logic below would store a second 7.5MB copy on every load.
-  if (url.pathname.startsWith('/models/')) return;
+  if (url.pathname.startsWith(`${BASE}models/`)) return;
 
   // /s is a per-story link preview rendered by a function (api/share.js). It is
   // same-origin and not under /api/, so the shell logic below would happily
   // store a separate copy of the app shell's cache entry for every story anyone
   // ever shared — and could serve a stale one back. Leave it to the network.
-  if (url.pathname === '/s') return;
+  if (url.pathname === `${BASE}s`) return;
 
   // App shell: network-first so every deploy is live on the next load;
   // the cache copy only serves when offline.
@@ -99,7 +111,7 @@ async function setState(key, value) {
 }
 
 async function checkNews() {
-  const r = await fetch('/api/news?category=top', { cache: 'no-store' });
+  const r = await fetch(new URL('api/news?category=top', self.location), { cache: 'no-store' });
   const data = await r.json();
   const articles = data.articles || [];
   if (!articles.length) return;
@@ -115,9 +127,11 @@ async function checkNews() {
       {
         body: lead.title,
         tag: 'meridian-news', // one notification, replaced in place — never a pile
-        icon: '/icons/icon.svg',
-        badge: '/icons/icon.svg',
-        data: { url: '/' },
+        // Scope-relative like everything else here: on a project Pages site an
+        // absolute icon path 404s and the notification renders without one.
+        icon: new URL('icons/icon.svg', self.location).href,
+        badge: new URL('icons/icon.svg', self.location).href,
+        data: { url: new URL('./', self.location).href },
       }
     );
   } catch { /* notification permission may have been revoked */ }
@@ -133,7 +147,8 @@ self.addEventListener('notificationclick', (e) => {
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       const c = list.find((w) => 'focus' in w);
-      return c ? c.focus() : clients.openWindow((e.notification.data && e.notification.data.url) || '/');
+      const target = (e.notification.data && e.notification.data.url) || new URL('./', self.location).href;
+      return c ? c.focus() : clients.openWindow(target);
     })
   );
 });

@@ -2,24 +2,24 @@
   "name": "Meridian — Real-Time Intelligence",
   "short_name": "Meridian",
   "description": "Real-time world news, history and market intelligence from open sources.",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#000000",
   "categories": ["news", "finance", "education"],
   "icons": [
-    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+    { "src": "./icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ],
   "share_target": {
-    "action": "/",
+    "action": "./",
     "method": "GET",
     "enctype": "application/x-www-form-urlencoded",
     "params": { "title": "t", "text": "text", "url": "read" }
   },
   "shortcuts": [
-    { "name": "Markets", "url": "/?view=markets", "description": "Live market analysis" },
-    { "name": "Saved stories", "url": "/?cat=saved", "description": "Your reading list" }
+    { "name": "Markets", "url": "./?view=markets", "description": "Live market analysis" },
+    { "name": "Saved stories", "url": "./?cat=saved", "description": "Your reading list" }
   ]
 }
