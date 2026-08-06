@@ -5,6 +5,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import { identify, PUBLISHERS } from './_publishers.js';
 import { vectorSpace } from './_similarity.js';
+import { stripHtml, safeLink } from './_text.js';
 
 const GN = 'https://news.google.com/rss';
 const gnTopic = (id) =>
@@ -192,19 +193,6 @@ async function fetchText(url, ms = 6000) {
   }
 }
 
-function stripHtml(s = '') {
-  return String(s)
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 // Bump common CDN thumbnail URLs to a larger, sharper size so cards don't
 // upscale a tiny image into a blurry mess.
 function upgradeImage(url) {
@@ -353,9 +341,12 @@ function hostOf(url) {
 
 function normalize(item, feedUrl) {
   const rawTitle = stripHtml(item.title?.['#text'] ?? item.title ?? '');
-  const link =
+  // safeLink refuses anything that is not plain http(s). A feed is a third
+  // party and this value ends up in an href the reader is invited to click.
+  const link = safeLink(
     (typeof item.link === 'object' ? item.link['@_href'] : item.link) ||
-    item.guid?.['#text'] || item.guid || '';
+    item.guid?.['#text'] || item.guid || ''
+  );
   // Google News titles are "Headline - Source"; split off the trailing source.
   // Only GN feeds get this treatment — regular publisher titles may contain
   // " - " and must not be split.

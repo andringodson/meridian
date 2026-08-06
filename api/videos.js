@@ -2,6 +2,7 @@
 // channels' public YouTube RSS feeds (open data, no key). Returns titles,
 // preview thumbnails and video ids for an embedded player.
 import { XMLParser } from 'fast-xml-parser';
+import { stripHtml } from './_text.js';
 
 const CHANNELS = [
   { id: 'UC16niRr50-MSBwiO3YDb3RA', name: 'BBC News' },
@@ -34,7 +35,7 @@ async function fetchChannel({ id, name }, ms = 6000) {
       const g = e['media:group'] || {};
       return {
         id: e['yt:videoId'],
-        title: String(e.title || '').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"'),
+        title: stripHtml(e.title || ''),
         channel: name,
         thumbnail: g['media:thumbnail']?.['@_url'] || `https://i.ytimg.com/vi/${e['yt:videoId']}/hqdefault.jpg`,
         publishedAt: e.published || null,

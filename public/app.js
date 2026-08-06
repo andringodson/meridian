@@ -590,7 +590,7 @@ async function loadHistory() {
     $('#rail-date').textContent = new Date().toLocaleDateString([], { month: 'long', day: 'numeric' });
     historyEl.innerHTML = (data.events || []).slice(0, 12).map((e) => `
       <li><a href="${esc(e.url || '#')}" target="_blank" rel="noopener noreferrer">
-        <span class="yr">${e.year}</span>
+        <span class="yr">${esc(String(e.year ?? ''))}</span>
         <div class="ev">${esc(e.text)}</div>
       </a></li>`).join('') || `<li class="empty">History unavailable.</li>`;
   } catch { historyEl.innerHTML = `<li class="empty">History unavailable.</li>`; }
@@ -1981,7 +1981,14 @@ installBtn.addEventListener('click', async () => {
   deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; installBtn.hidden = true;
 });
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  /* Relative, not '/sw.js'. GitHub Pages serves this project under /meridian/,
+     where an absolute path resolves to the domain root, 404s, and the .catch()
+     below swallows it — so the mirror had no service worker at all, silently:
+     no offline shell, no install prompt, nothing. Resolving against the
+     document also gives the registration the right scope in both places. */
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(new URL('sw.js', document.baseURI)).catch(() => {});
+  });
   /* A worker keeps control of the page it started on, so a worker that shipped
      a bug carries on serving the reader even after the fix is deployed — they
      see the breakage until they happen to open the site again. When a

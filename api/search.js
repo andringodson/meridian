@@ -5,6 +5,7 @@
 // like a curated result set, not a raw RSS dump. Edge-cached per query.
 import { XMLParser } from 'fast-xml-parser';
 import { identify, PUBLISHERS } from './_publishers.js';
+import { stripHtml, safeLink } from './_text.js';
 
 // Same edition triple as api/news.js, so a search returns the same regional
 // slice of the news the feed is showing.
@@ -41,19 +42,6 @@ async function fetchText(url, ms = 6000) {
   }
 }
 
-function stripHtml(s = '') {
-  return String(s)
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
 }
@@ -63,9 +51,11 @@ function hostOf(url) {
 // nested <ol> of related links, never real article prose, so summary stays blank.
 function normalize(item) {
   const rawTitle = stripHtml(item.title?.['#text'] ?? item.title ?? '');
-  const link =
+  // See the note in api/news.js — a feed-supplied link reaches an href.
+  const link = safeLink(
     (typeof item.link === 'object' ? item.link['@_href'] : item.link) ||
-    item.guid?.['#text'] || item.guid || '';
+    item.guid?.['#text'] || item.guid || ''
+  );
   let title = rawTitle;
   let source =
     (typeof item.source === 'object' ? item.source['#text'] : item.source) || '';
