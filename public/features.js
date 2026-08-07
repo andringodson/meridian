@@ -58,7 +58,12 @@ function getSettings() {
 }
 function saveSettings(patch) {
   const s = { ...getSettings(), ...patch };
-  localStorage.setItem(SET_KEY, JSON.stringify(s));
+  /* Guarded like every other write here. Storage throws on a full quota, and in
+     Safari's private mode it throws on the first write of the session — and an
+     uncaught throw at this point would abandon applySettings below, so a
+     preference the reader just chose would fail to take effect at all. Failing
+     to *remember* a setting is a much smaller thing than failing to apply it. */
+  try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch { /* quota, or private mode */ }
   applySettings(s);
   return s;
 }
@@ -361,10 +366,13 @@ $('#ai-key-form')?.addEventListener('submit', async (e) => {
 $('#ai-key-clear')?.addEventListener('click', async () => {
   const s = getSettings();
   delete s.aiKey;
-  localStorage.setItem(SET_KEY, JSON.stringify(s));
+  // Clearing a key must not be the one write that fails silently and leaves it
+  // on disk, so this reports rather than swallowing.
+  let cleared = true;
+  try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch { cleared = false; }
   renderKeyField();
   if (typeof Assistant !== 'undefined') { Assistant.resetBackend?.(); await Assistant.probe(); }
-  toast('Key removed');
+  toast(cleared ? 'Key removed' : 'Couldn’t clear the key — storage is unavailable');
 });
 
 /* ---------- neural voice (opt-in, on-device) ----------

@@ -49,7 +49,10 @@ function toggleSave(article) {
   const had = list.some((a) => a.link === article.link);
   if (had) list = list.filter((a) => a.link !== article.link);
   else list = [article, ...list].slice(0, 100);
-  localStorage.setItem(SAVE_KEY, JSON.stringify(list));
+  // Guarded: storage throws when the quota is full or when Safari is in private
+  // mode, and an uncaught throw here would skip the offline stash below — so the
+  // story would look saved and have nothing behind it.
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(list)); } catch { /* quota, or private mode */ }
   // Saving is a promise that the story will still be there later, including on
   // a plane. Stow the text now, while there is a connection to stow it with.
   if (had) dropOffline(article); else stashOffline(article);
@@ -1042,7 +1045,7 @@ function getWatch() { try { return JSON.parse(localStorage.getItem(WATCH_KEY)) |
 function toggleWatch(sym) {
   let w = getWatch();
   w = w.includes(sym) ? w.filter((s) => s !== sym) : [...w, sym].slice(0, 24);
-  localStorage.setItem(WATCH_KEY, JSON.stringify(w));
+  try { localStorage.setItem(WATCH_KEY, JSON.stringify(w)); } catch { /* quota, or private mode */ }
   return w.includes(sym);
 }
 // pseudo-quotes for watchlist symbols outside the built-in instrument set

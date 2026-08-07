@@ -68,20 +68,32 @@ const TAG = /<[^>]*>/g;
 
 /* Tags out, references decoded, whitespace collapsed.
  *
- * The second tag pass is not redundant. Feeds routinely double-encode, so a
- * description arrives as `&lt;p&gt;Text&lt;/p&gt;` — the first pass sees no
- * tags, decoding reveals them, and without the second pass the reader is shown
- * literal `<p>` markers. It is also the safer order: anything that decodes into
- * a tag is removed rather than passed on.
+ * Stripping and decoding alternate to a fixed point rather than running once
+ * each, because feeds double-encode. The Guardian shipped a standfirst reading
+ * "Their parents were Womack &amp;amp; Womack": the publisher escaped the
+ * ampersand in the band's name, and the feed then escaped that escape. One pass
+ * turns it into `&amp;`, which is what the reader sees. The same shape carries
+ * markup — `&lt;p&gt;Text&lt;/p&gt;` has no tags until it is decoded — so a
+ * single pass in either order leaves something behind.
+ *
+ * Alternating is also the safer order: anything that decodes into a tag meets a
+ * strip on the next turn instead of being passed along.
+ *
+ * Three turns is the bound. Two are needed for the double-encoding that occurs
+ * in the wild, the third confirms it has settled, and stopping there means text
+ * engineered to keep expanding cannot spin.
  *
  * Tags become a space rather than nothing, so `<p>one</p><p>two</p>` reads as
- * "one two" instead of "onetwo". The collapse below tidies up after it.
+ * "one two" instead of "onetwo". The collapse tidies up after it.
  */
 export function stripHtml(s = '') {
-  return decodeEntities(String(s).replace(TAG, ' '))
-    .replace(TAG, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  let out = String(s);
+  for (let i = 0; i < 3; i++) {
+    const next = decodeEntities(out.replace(TAG, ' '));
+    if (next === out) break;
+    out = next;
+  }
+  return out.replace(TAG, ' ').replace(/\s+/g, ' ').trim();
 }
 
 /* Feed-supplied links end up in an href. A feed is a third party, and `esc()`
@@ -102,4 +114,21 @@ export function safeLink(u) {
   } catch {
     return '';
   }
+}
+
+/* A feed's own timestamp, or null.
+ *
+ * `new Date(x).toISOString()` throws RangeError on an unparseable string rather
+ * than returning anything, and RSS pubDate is free text that publishing systems
+ * get wrong. That throw used to escape the item mapper, and because a mapper
+ * runs over the whole feed at once, one bad item cost every item beside it:
+ * api/news.js wraps the parse and silently drops that newsroom from the
+ * category, and api/search.js answers 502 for the entire request.
+ *
+ * A story whose date cannot be read is still a story. It is dated null, sorts
+ * last, and stays in the feed. */
+export function isoDate(v) {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }

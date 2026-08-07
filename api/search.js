@@ -5,7 +5,7 @@
 // like a curated result set, not a raw RSS dump. Edge-cached per query.
 import { XMLParser } from 'fast-xml-parser';
 import { identify, PUBLISHERS } from './_publishers.js';
-import { stripHtml, safeLink } from './_text.js';
+import { stripHtml, safeLink, isoDate } from './_text.js';
 
 // Same edition triple as api/news.js, so a search returns the same regional
 // slice of the news the feed is showing.
@@ -77,7 +77,7 @@ function normalize(item) {
     publisher: pub ? pub.key : null,
     summary: '',
     image: null,
-    publishedAt: published ? new Date(published).toISOString() : null,
+    publishedAt: isoDate(published),
   };
 }
 

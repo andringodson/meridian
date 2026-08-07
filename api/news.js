@@ -5,7 +5,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import { identify, PUBLISHERS } from './_publishers.js';
 import { vectorSpace } from './_similarity.js';
-import { stripHtml, safeLink } from './_text.js';
+import { stripHtml, safeLink, isoDate } from './_text.js';
 
 const GN = 'https://news.google.com/rss';
 const gnTopic = (id) =>
@@ -376,7 +376,7 @@ function normalize(item, feedUrl) {
     summary: stripHtml(item.description?.['#text'] ?? item.description ?? '').slice(0, 240),
     image: img,
     srcset: srcsetFor(img),
-    publishedAt: published ? new Date(published).toISOString() : null,
+    publishedAt: isoDate(published),
   };
 }
 
