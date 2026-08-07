@@ -12,6 +12,12 @@ const SRC = 'public';
 // Pages serves this repo under /meridian/, so its build asks for relative asset
 // paths. Vercel serves at the root and does not.
 const RELATIVE = process.argv.includes('--relative');
+/* Declares that this build has no API behind it, so public/static-api.js reads
+   the frozen snapshots instead of calling /api/*. Separate from --relative on
+   purpose: a sub-path and a missing API are different facts, and a host can
+   have either without the other. */
+const STATIC = process.argv.includes('--static');
+const STATIC_META = '<meta name="meridian-api" content="static"/>';
 const OUT = 'dist';
 
 async function walk(dir) {
@@ -104,6 +110,11 @@ async function build() {
          the way a missing model already fails. */
       if (RELATIVE) {
         out = out.replace(/\b(src|href)="\/(?!\/)/g, '$1="./');
+      }
+      /* Stamped into <head> ahead of everything, because static-api.js reads
+         it while wrapping fetch and must not run before the answer is there. */
+      if (STATIC) {
+        out = out.replace(/<head(\s[^>]*)?>/i, (m) => `${m}${STATIC_META}`);
       }
       await writeFile(dst, out);
       before += raw.length; after += out.length; min++;

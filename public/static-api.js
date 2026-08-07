@@ -17,11 +17,26 @@
 (() => {
   'use strict';
 
-  // Pages and the common static hosts. Everything else is assumed to have an
-  // API behind it, which is the safe default: a wrong guess here would break a
-  // working deployment, while missing one only means the mirror looks offline.
-  const STATIC_HOST = /\.github\.io$|\.pages\.dev$|\.netlify\.app$|\.surge\.sh$/;
-  if (!STATIC_HOST.test(location.hostname)) return;
+  /* Two ways to know this deployment has no API behind it, and the order
+     matters.
+
+     The build says so. `build.mjs --static` stamps a meta tag, and the workflow
+     that publishes a frozen mirror is the one that passes it. That is knowledge
+     rather than inference: the same build that wrote the snapshots said they are
+     what to read.
+
+     Failing that, a host that cannot run server code whatever it is asked to.
+     github.io and surge.sh serve files and nothing else, so the guess is safe.
+
+     What is NOT in that list any more is pages.dev and netlify.app. Both were
+     here, and both are wrong: Cloudflare Pages and Netlify run functions, so
+     deploying the real API to either would have had this shim quietly answer
+     from stale snapshots instead — a live site serving yesterday's news with no
+     error anywhere to explain it. Ambiguous hosts have to be told, and the meta
+     tag is how they are told. */
+  const declared = document.querySelector('meta[name="meridian-api"]')?.content === 'static';
+  const FILES_ONLY_HOST = /\.github\.io$|\.surge\.sh$/;
+  if (!declared && !FILES_ONLY_HOST.test(location.hostname)) return;
 
   const BASE = 'api-static/';
   const root = () => {

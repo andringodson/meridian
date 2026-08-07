@@ -45,7 +45,14 @@ jobs:
       - run: npm ci
 
       - name: Build the site
-        run: npm run build -- --relative
+        # --relative because a project Pages site is served under /<repo>/.
+        # --static because Pages serves files and never functions, which is what
+        # tells public/static-api.js to read the frozen snapshots below rather
+        # than call an /api/* that is not there. github.io is also on that
+        # script's files-only host list, so the mirror would work without this —
+        # but the flag states the fact instead of leaving it to be inferred from
+        # a domain name, which is what a host like Cloudflare Pages gets wrong.
+        run: npm run build -- --relative --static
 
       - name: Freeze the API
         run: npm run snapshot

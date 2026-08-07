@@ -17,13 +17,22 @@
 // With no key configured the route answers 503 `ai-unconfigured` and the client
 // falls back to summarising on-device. The feature degrades; it never breaks.
 
-import { randomBytes } from 'node:crypto';
 import { rank } from './_similarity.js';
 import { extractPage } from './read.js';
 
-const BASE = (process.env.AI_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
-const MODEL = process.env.AI_MODEL || 'llama-3.3-70b-versatile';
-const KEY = process.env.AI_API_KEY || '';
+/* Read per call, not once at import. On Vercel the two are the same thing; on a
+   Workers-style runtime there is no process.env at module scope at all — the
+   configuration arrives with the request — so reading it eagerly would leave
+   every route permanently unconfigured on a second host. */
+const envOf = (k, dflt = '') => {
+  const v = globalThis.process?.env?.[k];
+  return v === undefined || v === '' ? dflt : v;
+};
+const provider = () => ({
+  base: envOf('AI_BASE_URL', 'https://api.groq.com/openai/v1').replace(/\/+$/, ''),
+  model: envOf('AI_MODEL', 'llama-3.3-70b-versatile'),
+  key: envOf('AI_API_KEY', ''),
+});
 
 // Ceilings sized to the free tier's tokens-per-minute rather than to what the
 // model could accept — one oversized request would starve the next reader.
@@ -96,7 +105,13 @@ const str = (v, max) => (typeof v === 'string' ? v : '').replace(/\s+/g, ' ').tr
    since retrieval below now pulls in the body text of stories the reader never
    chose to open, the amount of untrusted text reaching the prompt went up
    enough to make the difference matter. */
-const fenceOf = () => `<<<MERIDIAN_SOURCE_${randomBytes(9).toString('hex').toUpperCase()}>>>`;
+const fenceOf = () => {
+  // Web Crypto rather than node:crypto — identical randomness, and it is the
+  // one API that exists unchanged on Node, Cloudflare Workers and Deno, so this
+  // route stays portable to a second host without a compatibility flag.
+  const b = crypto.getRandomValues(new Uint8Array(9));
+  return `<<<MERIDIAN_SOURCE_${[...b].map((x) => x.toString(16).padStart(2, '0')).join('').toUpperCase()}>>>`;
+};
 
 const systemFor = (FENCE) => `You are Meridian's news assistant. Meridian aggregates world news, markets and history from open sources.
 
@@ -303,7 +318,8 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
     // `byok` tells the client it can offer the key field: this route will
     // accept a reader's own key even when the deployment has none configured.
-    res.status(200).json({ available: !!KEY, model: MODEL, byok: true });
+    const { key, model } = provider();
+    res.status(200).json({ available: !!key, model, byok: true });
     return;
   }
 
@@ -315,7 +331,8 @@ export default async function handler(req, res) {
 
   // The reader's own key wins over the deployment's, so someone who supplies
   // one is spending their own quota rather than the site's.
-  const key = readerKey(req) || KEY;
+  const { base: BASE, model: MODEL, key: deployKey } = provider();
+  const key = readerKey(req) || deployKey;
   if (!key) {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.status(503).json({

@@ -15,6 +15,7 @@
     "check:images": "node scripts/check-images.mjs",
     "eval:cluster": "node scripts/eval-cluster.mjs",
     "test:text": "node scripts/test-text.mjs",
+    "test:adapter": "node scripts/test-adapter.mjs",
     "smoke": "node scripts/smoke.mjs",
     "snapshot": "node scripts/snapshot.mjs"
   },
