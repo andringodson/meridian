@@ -311,6 +311,34 @@ Hosted on Vercel: the built `dist/` on the CDN, `/api/*` as Node serverless
 functions, and security headers plus a content-security policy applied in
 `vercel.json`.
 
+### Other hosts
+
+The routes are written to Vercel's `(req, res)` signature, and `api/_adapter.js`
+maps them onto the Web-standard `Request`/`Response` that Cloudflare Workers,
+Netlify and Deno use. So a second host runs the same routes rather than a second
+copy of them, which is the only version of this that stays true over time.
+
+**GitHub Pages** — already live, as a fallback mirror at
+[andringodson.github.io/meridian](https://andringodson.github.io/meridian).
+Pages serves files and never functions, so `.github/workflows/pages.yml` builds
+with `--relative --static`, freezes the feeds into JSON with `npm run snapshot`,
+and `public/static-api.js` reads those instead of calling an API that is not
+there. Reader extraction, search, weather and the assistant need the live site.
+
+**Cloudflare Pages** — ready but not connected; it needs an account, which is
+the one step nobody can do on your behalf. Connect the repo in the dashboard
+with build command `npm run build` and output directory `dist`. `functions/` is
+picked up automatically and serves the real API, so this is a full second host
+rather than a mirror. Set `AI_API_KEY` in the project settings to turn the
+assistant on; without it the route answers `ai-unconfigured` and the client
+falls back to on-device summarising.
+
+Note that the Cloudflare build takes **no** `--static` flag. That flag is what
+stamps the meta tag telling `public/static-api.js` there is no API. Pages
+Functions *are* an API, so the flag must stay off or the site would quietly
+answer from stale snapshots. Deciding this by hostname is what the code used to
+do, and it was wrong: `pages.dev` and `netlify.app` both run functions.
+
 [esbuild]: https://esbuild.github.io/
 
 ## Roadmap

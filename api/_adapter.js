@@ -128,16 +128,20 @@ export function toWebHandler(handler, { env } = {}) {
     // An aborted request is the same signal as a closed socket on Node.
     request.signal?.addEventListener('abort', fireClose, { once: true });
 
-    /* process.env does not exist on Workers. The handlers read it at module
-       scope, so a host that passes configuration as a binding has to put it
-       somewhere they can find it before they are imported — see the note in
-       functions/api/[[route]].js. This only tops it up for anything imported
-       later. */
-    if (env && typeof globalThis.process === 'object' && globalThis.process.env) {
+    /* Workers has no process.env, and delivers configuration as a per-request
+       binding instead. The handlers read process.env, so it is created here and
+       topped up from the binding — which is why api/ai.js reads its provider
+       settings per call rather than at import: by the time a module-scope read
+       would have run, there was nothing to read.
+       The binding is authoritative for the keys it carries: it is the host's
+       current configuration, so a value left over from an earlier request in the
+       same isolate must not outrank it. Keys it does not mention are untouched,
+       so this never strips an environment it did not set. */
+    if (env) {
+      if (!globalThis.process) globalThis.process = { env: {} };
+      if (!globalThis.process.env) globalThis.process.env = {};
       for (const [k, v] of Object.entries(env)) {
-        if (typeof v === 'string' && globalThis.process.env[k] === undefined) {
-          globalThis.process.env[k] = v;
-        }
+        if (typeof v === 'string') globalThis.process.env[k] = v;
       }
     }
 
